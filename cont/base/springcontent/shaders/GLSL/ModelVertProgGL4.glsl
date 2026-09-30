@@ -298,13 +298,17 @@ void GetModelSpaceVertex(out vec4 msPosition, out vec3 msNormal)
 	if (staticModel || weights[0] == 1.0)
 		return;
 
+	float wSum = weights[0];
+
 	msPosition *= weights[0];
 	msNormal   *= weights[0];
 
 	Transform bposeTra = transforms[instData.w + bID0];
 
 	// Vertex[ModelSpace,BoneX] = PieceMat[BoneX] * InverseBindPosMat[BoneX] * BindPosMat[Bone0] * Vertex[Bone0]
-	for (uint bi = 1; bi < 3; ++bi) {
+	// read all 4 influences: ReparentMeshesTrianglesToBones() can put a zero-weight bone in slot 0
+	// and move the vertex's own heaviest influence to slot 3 (ModelUtils.cpp)
+	for (uint bi = 1; bi < 4; ++bi) {
 		uint bID = GetUnpackedValue(bonesInfo.x, bi) + (GetUnpackedValue(bonesInfo.z, bi) << 8u);
 
 		if (bID == 0xFFFFu || weights[bi] == 0.0)
@@ -325,6 +329,13 @@ void GetModelSpaceVertex(out vec4 msPosition, out vec3 msNormal)
 
 		msPosition += txPiecePos    * weights[bi];
 		msNormal   += txPieceNormal * weights[bi];
+		wSum       += weights[bi];
+	}
+
+	// the weights read need not sum to 1; with wSum == 0 msPosition stays (0,0,0,0), which rasterizes at NDC (0,0)
+	if (wSum > 0.0) {
+		msPosition /= wSum;
+		msNormal   /= wSum;
 	}
 }
 

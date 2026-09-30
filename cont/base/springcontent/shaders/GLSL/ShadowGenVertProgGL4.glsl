@@ -284,7 +284,7 @@ void GetModelSpaceVertex(out vec4 msPosition, out vec3 msNormal)
 	Transform bposeTra = transforms[instData.w + bID0];
 
 	// Vertex[ModelSpace,BoneX] = PieceMat[BoneX] * InverseBindPosMat[BoneX] * BindPosMat[Bone0] * Vertex[Bone0]
-	for (uint bi = 1; bi < 3; ++bi) {
+	for (uint bi = 1; bi < 4; ++bi) {
 		uint bID = GetUnpackedValue(bonesInfo.x, bi) + (GetUnpackedValue(bonesInfo.z, bi) << 8u);
 
 		if (bID == 0xFFFFu || weights[bi] == 0.0)
@@ -310,8 +310,10 @@ void GetModelSpaceVertex(out vec4 msPosition, out vec3 msNormal)
 		wSum       += weights[bi];
 	}
 
-	msPosition /= wSum;
-	msNormal   /= wSum;
+	if (wSum > 0.0) {
+		msPosition /= wSum;
+		msNormal   /= wSum;
+	}
 }
 
 void main(void)

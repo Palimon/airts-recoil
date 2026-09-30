@@ -112,3 +112,37 @@ frames, and `game_end` declares the winner. It uses no BAR content.
 - Why: lets Lua detect patched features, keeps stock clients out of our games, ships builds, and
   meets the GPL source obligation from the first tag.
 - Upstream: not offered (fork-specific).
+
+### 001 skinning-gl4 (`patch/skinning-gl4`, 2026-09-30)
+
+- Flag: `Engine.FeatureSupport.airtsSkinningFix`. Patch level 2.
+- Symptom: thin slivers from skinned units to the screen centre on real GPUs (first watched
+  match on Zeus).
+- Cause: `ModelUtils.cpp` `ReparentMeshesTrianglesToBones` moves a vertex's heaviest influence
+  into slot 3 when the triangle's bone is missing from the vertex (lines 106-111);
+  `ModelVertProgGL4.glsl` then multiplies by slot 0 and reads only slots 1 and 2 (lines 301-307),
+  so a single-influence vertex becomes (0,0,0,0) and lands at the screen centre.
+  `ShadowGenVertProgGL4.glsl` divides by a weight sum that can be zero (NaN shadows).
+- Fix: shader-only. Both vertex programs read all four influences, sum the weights used, and
+  divide position and normal by the sum when it is above zero.
+- Files: `cont/base/springcontent/shaders/GLSL/ModelVertProgGL4.glsl`,
+  `cont/base/springcontent/shaders/GLSL/ShadowGenVertProgGL4.glsl` (built into
+  `base/springcontent.sdz`); the flag in `rts/Lua/LuaConstEngine.cpp`; `airts/PATCH_LEVEL`.
+- Proof: under Xvfb with a diagnostic line that draws (0,0,0,0) at the screen centre (as a
+  desktop GPU does), lines appear from tinker_s_crank and grandfather_tread before the patch and
+  not after; a gadget bending three leg joints shows smooth deformation after the patch
+  (evidence in the showcase handoff folder, `engine-patches/001-gl4-skinning-influences/evidence/`).
+  The orchestrator reports it verified on a real GPU. spring-headless runs the full game
+  unchanged (no C++ simulation code changed); the gate result is below.
+- Shipping without an engine rebuild: copy the two `.glsl` files into the game archive under
+  `shaders/GLSL/` (the engine reads game-archive shaders before base content). The fork build
+  carries them in `springcontent.sdz`. Whether a patched base archive changes the game checksum
+  in networked games is untested; our Windows and Linux builds of one commit carry the same
+  files.
+- Upstream: worth a pull request to RecoilEngine (skinned glTF is untested upstream); offer the
+  first commit of this branch alone. Not yet offered.
+- Also noted for later: `GLTFParser` ignores `inverseBindMatrices`;
+  `ReparentCompleteMeshesToBones` indexes a cleared vector (`ModelUtils.cpp:177-180`); joint
+  lookups have no bounds check (`GLTFParser.cpp:150-153`); hiding a joint piece by zero scale
+  zeroes its weights and reintroduces slivers; model load is quadratic in vertex count
+  (`ModelUtils.cpp:128`).
