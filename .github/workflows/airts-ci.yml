@@ -106,14 +106,9 @@ jobs:
       - name: Build tests
         run: cmake --build build --target engine-headless tests && ccache -s
       # testUnitSync finds base/springcontent.sdz through SPRING_DATADIR (the build dir).
-      # testCreg fails at the base commit: upstream a53282a (2026-09-07, "Particle draw
-      # optimizations") added CProjectile::mtDrawSafe without a creg entry, so 37 projectile
-      # classes report a missing byte. It runs below, reported but not gating (PATCHES.md).
+      # testCreg gates again since patch/creg-mtdrawsafe registered CProjectile::mtDrawSafe.
       - name: Run tests
-        run: cd build && SPRING_DATADIR=$PWD ctest --output-on-failure -j4 -E '^testCreg$'
-      - name: testCreg (known upstream failure, not gating)
-        continue-on-error: true
-        run: cd build && SPRING_DATADIR=$PWD ctest --output-on-failure -R '^testCreg$'
+        run: cd build && SPRING_DATADIR=$PWD ctest --output-on-failure -j4
 
   determinism:
     name: determinism (two headless games, same end state)
