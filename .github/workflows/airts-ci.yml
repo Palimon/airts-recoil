@@ -1,0 +1,137 @@
+# AIRTS fork CI (PATCHES.md, "CI"). Upstream's workflows stay in this folder untouched; they run
+# only on master, on pull requests to paths they watch, or by hand, so they do not fire here.
+name: airts-ci
+
+on:
+  push:
+    branches: ['airts/**', 'patch/**']
+  pull_request:
+    branches: ['airts/main']
+  workflow_dispatch:
+
+concurrency:
+  group: airts-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APT_DEPS: >-
+    build-essential cmake ninja-build binutils-gold ccache git p7zip-full bc
+    libsdl2-dev libopenal-dev libfreetype6-dev libfontconfig1-dev libdevil-dev libunwind-dev
+    liblzma-dev zlib1g-dev libexpat1-dev libvorbis-dev libogg-dev libgl1-mesa-dev libx11-dev
+    libminizip-dev libcurl4-openssl-dev libjsoncpp-dev libglew-dev
+  # The flags that build on Ubuntu 24.04 (spike report, "build"): gold is the engine's C++
+  # linker, and the plutovg and lunasvg example programs fail to link with it.
+  CMAKE_COMMON: >-
+    -G Ninja
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    -DAI_TYPES=NONE
+    -DPLUTOVG_BUILD_EXAMPLES=OFF
+    -DLUNASVG_BUILD_EXAMPLES=OFF
+    -DBUILD_spring-legacy=OFF
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 3G
+
+jobs:
+  build:
+    name: build engine-headless and engine-dedicated (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # git describe needs history and the upstream version tags
+          submodules: recursive
+      - name: Install build dependencies
+        run: sudo apt-get update -q && sudo apt-get install -y -q $APT_DEPS
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-build-${{ github.sha }}
+          restore-keys: ccache-build-
+      - name: Configure
+        # no debug info in CI: same -O3 code as the release build, smaller and faster to link
+        run: >-
+          cmake -S . -B build $CMAKE_COMMON -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/install
+          "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG" "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG"
+      - name: Build
+        run: cmake --build build && ccache -s
+      - name: Install
+        run: cmake --install build
+      - name: Version identity
+        run: |
+          V=$(./install/spring-headless --sync-version | tail -1)
+          echo "sync version: $V"
+          echo "$V" | grep -Eq ' airts-[0-9]+$' || { echo "sync version has no airts-<n> suffix"; exit 1; }
+          echo "$V" | grep -q "g$(git rev-parse --short=7 HEAD)" || { echo "sync version does not name HEAD"; exit 1; }
+          ./install/spring-dedicated --sync-version | tail -1
+      - name: Pack install tree
+        run: tar -C install -czf engine-linux.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-linux
+          path: engine-linux.tgz
+          retention-days: 7
+
+  unit-tests:
+    name: engine unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Install build dependencies
+        run: sudo apt-get update -q && sudo apt-get install -y -q $APT_DEPS
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-tests-${{ github.sha }}
+          restore-keys: ccache-tests-
+      - name: Configure
+        run: >-
+          cmake -S . -B build $CMAKE_COMMON -DBUILD_TESTING=ON -DBUILD_spring-dedicated=OFF
+          "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG" "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG"
+      - name: Build tests
+        run: cmake --build build --target engine-headless tests && ccache -s
+      - name: Run tests
+        run: cd build && ctest --output-on-failure -j4
+
+  determinism:
+    name: determinism (two headless games, same end state)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4   # only airts/ is used; no submodules
+      - name: Install runtime dependencies
+        run: sudo apt-get update -q && sudo apt-get install -y -q $APT_DEPS
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-linux
+      - name: Unpack engine
+        run: mkdir -p install && tar -C install -xzf engine-linux.tgz
+      - name: Single-threaded determinism (gating)
+        run: AIRTS_DET_THREADS=1 airts/scripts/determinism.sh install/spring-headless det-1thread
+      - name: Lua sees the fork flags
+        run: |
+          grep -h -o 'AIRTS_FEATURES .*' det-1thread/run-a/stdout.log | tee features.txt
+          grep -q 'airtsFork=true' features.txt
+      - name: Multi-threaded determinism (known upstream issue, not gating)
+        continue-on-error: true
+        run: AIRTS_DET_THREADS=default airts/scripts/determinism.sh install/spring-headless det-mt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: determinism-logs
+          path: |
+            det-*/run-*/stdout.log
+            det-*/run-*/census.txt
+            det-*/census.diff
+          retention-days: 14

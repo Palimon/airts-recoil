@@ -57,6 +57,13 @@ local function census(n)
     n, table.concat(counts, "/"), math.floor(hp), h))
 end
 
+function gadget:Initialize()
+  -- the fork's feature flags as game Lua sees them (nil on stock Recoil)
+  local fs = Engine.FeatureSupport or {}
+  Spring.Echo(string.format("AIRTS_FEATURES airtsFork=%s airtsPatchLevel=%s airtsSkinningFix=%s version=%s",
+    tostring(fs.airtsFork), tostring(fs.airtsPatchLevel), tostring(fs.airtsSkinningFix), tostring(Engine.version)))
+end
+
 function gadget:GameOver()
   over = true
 end
