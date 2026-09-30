@@ -101,6 +101,14 @@ frames, and `game_end` declares the winner. It uses no BAR content.
   frame 32465 on every run) and the spike's networked runs had zero sync errors, but a
   multiplayer desync is the risk. The CI gate runs single-threaded until this is understood.
 
+- **testCreg fails at the base commit.** Upstream a53282a (2026-09-07, "Particle draw
+  optimizations") added `bool mtDrawSafe` to `CProjectile` (`rts/Sim/Projectiles/Projectile.h:121`)
+  without a creg entry in `Projectile.cpp`, so `spring-headless --test-creg` reports 37 of 216
+  classes with a missing byte between `drawSorted` and `blockPreciseCol`. Save games of
+  projectiles may lose the field; nothing else is affected. CI runs testCreg without gating on
+  it. The fix is one `CR_MEMBER(mtDrawSafe)` (or `CR_IGNORED`) line, worth an upstream pull
+  request; not patched here.
+
 ## Patches
 
 ### 000 fork-plumbing (in `airts/main`, 2026-09-30)
