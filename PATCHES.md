@@ -13,6 +13,41 @@ the reason, the proof, the Lua feature flag and the upstream status. The engine 
 | `airts/main` | `airts/base` plus the fork plumbing plus every merged patch branch. All builds come from here. |
 | `patch/<name>` | One branch per patch, started from `airts/main`, commit messages prefixed `[<name>]`, merged into `airts/main` with `--no-ff` after the gate below. |
 
+## For patch authors: exact commands
+
+On Tokyo, any clone owned by `palimon` can push to this fork: the deploy key is the SSH host
+alias `github-airts-recoil` in `~/.ssh/config` (write access to this repository only). The
+fork's working clone is `~/recoil-spike/airts-recoil`; `~/recoil-spike/RecoilEngine` is the
+spike's upstream clone.
+
+```bash
+# 1. Remote and base (in whichever clone holds your work)
+git remote add fork git@github-airts-recoil:Palimon/airts-recoil.git 2>/dev/null || true
+git fetch fork
+# 2. Start from airts/main, or move a branch started from ff8e2a1 onto it
+git checkout -b patch/<name> fork/airts/main
+git rebase --onto fork/airts/main ff8e2a171613321c8dadca995fd74583d25f4c3e patch/<name>
+# 3. Commits: messages start with "[<name>] "; the last one adds the flag
+#    (LuaPushNamedBool(L, "airts<Name>", true) next to the other airts keys in
+#    rts/Lua/LuaConstEngine.cpp, plus its @field doc line), bumps airts/PATCH_LEVEL by one
+#    and adds the entry at the end of this file.
+# 4. Push: CI (.github/workflows/airts-ci.yml) runs on every push to patch/**
+git push fork patch/<name>
+gh run list -R Palimon/airts-recoil --branch patch/<name>      # from the Windows box
+# 5. Local gate on Tokyo: every engine launch goes through the host-wide slot limiter
+export AIRTS_DET_WRAP=~/recoil-spike/tools/engine-slot.sh
+airts/scripts/determinism.sh <build>/spring-headless /tmp/det-<name>                 # fixture, 1 thread
+AIRTS_DET_THREADS=default airts/scripts/determinism.sh <build>/spring-headless /tmp/cog-<name>   ~/recoil-spike/data ~/recoil-spike/w-cog/host.txt                                    # Cogwright match
+# 6. Merge after the gate (the orchestrator lands it)
+git checkout airts/main && git merge --no-ff patch/<name> && git push fork airts/main
+```
+
+Builds: `RELEASING.md` (docker-build-v2 on Tokyo, both platforms). A native Linux build that
+matches CI: `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DAI_TYPES=NONE
+-DPLUTOVG_BUILD_EXAMPLES=OFF -DLUNASVG_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
+-DCMAKE_INSTALL_PREFIX=$PWD/install && cmake --build build && cmake --install build` (needs
+`binutils-gold`; the checkout needs the upstream version tags).
+
 ## Version identity
 
 The version string is `<git describe> airts-<n>`, for example `2026.09.01-8-gb41172b airts-1`,
@@ -94,7 +129,8 @@ frames, and `game_end` declares the winner. It uses no BAR content.
   result. Positions of one team already differ at frame 300, before any combat. Six more runs
   from a warm path cache gave 4 end states (2108, 2206, 2272, 2504). With
   `WorkerThreadCount = 1` six concurrent runs were identical (GameOver frame 2108, final census
-  hash 56095). The divergence is in movement, so the likely sources are the multi-threaded
+  hash 56095). The GitHub runner (4 cores) reproduced it in CI run 36664421989: GameOver frames
+  2272 and 2108 with default threads, 2108 and 2108 single-threaded. The divergence is in movement, so the likely sources are the multi-threaded
   ground-move and path systems (`rts/Sim/MoveTypes/Systems/GroundMoveSystem.cpp`,
   `rts/Sim/Path/HAPFS/PathManager.cpp`, `PathingState.cpp`, `rts/Sim/Units/UnitHandler.cpp`).
   Not yet bisected, not yet reported upstream. The Cogwright match did not show it (GameOver
@@ -156,3 +192,25 @@ frames, and `game_end` declares the winner. It uses no BAR content.
   lookups have no bounds check (`GLTFParser.cpp:150-153`); hiding a joint piece by zero scale
   zeroes its weights and reintroduces slivers; model load is quadratic in vertex count
   (`ModelUtils.cpp:128`).
+
+#### Gate result for skinning-gl4 (2026-09-30)
+
+Build: `airts/main` at `dc05e27162` (the merge of this patch), `docker-build-v2/build.sh linux` on
+Tokyo, stored in `~/recoil-spike/builds/airts-main-dc05e27162/linux/`; sync version
+`2026.09.01-13-gdc05e27 airts-2` (stock: `2026.09.01-5-gff8e2a1 HEAD`).
+
+1. CI: run 36666837840 on `2c26a34` (same engine source as `dc05e27`, later commits change only
+   CI, docs and the determinism script) passed: build, 27 of 27 gating unit tests (testCreg
+   fails as upstream, see above), determinism 2108/2108 single-threaded, Lua read
+   `airtsFork=true airtsPatchLevel=2 airtsSkinningFix=true`.
+2. Fixture on Tokyo, single-threaded, two runs: GameOver frame 2108 both, 8 identical census lines,
+   last `AIRTS_CENSUS frame=2100 units=6/1 hp=1585 hash=56095`, the same as the stock engine.
+3. Cogwright single-process match (`~/recoil-spike/w-cog/host.txt`, data `~/recoil-spike/data`,
+   default threads, as the spike ran it), two runs through `engine-slot.sh`: exit 0, GameOver
+   `winners=0 frame=32465` both (stock: 32465), quit at 32495, 65 markers, 68 burn-unit lines
+   (34 burning, 17 ended, 17 died burning), 20 AI waves, 7 unitdefs, zero error and zero sync
+   lines (fact sheet section 12 patterns). Every count equals the stock run in the spike's
+   `evidence/cogwright/cog-checks.txt`. Wall 78.4 s and 77.4 s.
+4. Cross-platform run: not needed (no simulation code changed).
+5. Watched check on Zeus: pending with this build; the shader fix itself was checked on a real
+   GPU before it entered the fork.

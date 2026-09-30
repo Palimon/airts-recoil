@@ -27,12 +27,17 @@ The container runs `cmake` with `-DCMAKE_BUILD_TYPE=RELWITHDEBINFO` and `-O3 -g 
 `.cache/ccache-amd64-<os>/`, so a rebuild after a small patch takes minutes. The source tree is
 mounted read-only into the container: do not edit or check out files while a build runs.
 
-Measured on Tokyo (see `PATCHES.md` for the build log of each release):
+Measured on Tokyo on 2026-09-30 for `dc05e27162`, both cold (empty ccache), `--jobs 12`, run one
+after the other while other agents' engines and builds kept the load average between 60 and 260
+and available memory at times near zero, so treat these as upper bounds:
 
-| Build | Cold (empty ccache) | Warm (ccache, after a small patch) |
-|---|---|---|
-| Windows (`build.sh windows`) | MEASURE_WIN_COLD | MEASURE_WIN_WARM |
-| Linux (`build.sh linux`) | MEASURE_LINUX_COLD | MEASURE_LINUX_WARM |
+| Build | Wall time |
+|---|---|
+| Windows (`build.sh --jobs 12 windows`) | 3189 s (53 min 9 s) |
+| Linux (`build.sh --jobs 12 linux`) | 3533 s until the host's process watchdog killed the `spring-headless` link (05:05Z to 05:09Z it matched `g++` lines as engines), then 116 s for the remaining links (`build.sh --compile --jobs 1 linux`): about 61 min in all |
+
+A warm rebuild (ccache filled, small patch) is not yet measured. `--jobs 12` leaves room for
+engines on the shared host; an idle Tokyo can use `--jobs 22`.
 
 For reference, the spike's Windows cross-compile on Zeus WSL took 16 min 15 s.
 
@@ -47,7 +52,9 @@ mkdir -p $D && cp -a build-amd64-linux/install $D/linux && cp -a build-amd64-win
 $D/linux/spring-headless --sync-version | tee $D/sync-version.txt
 ```
 
-The Windows `spring.exe` reports the same string (`spring.exe --sync-version` on Zeus).
+The Windows `spring.exe` reports the same string (`spring.exe --sync-version` on Zeus;
+`strings -n 12 spring.exe | grep airts-` checks it on Tokyo). `spring-dedicated` prints nothing
+for `--sync-version`; its infolog banner shows the version.
 
 ## Before shipping
 
