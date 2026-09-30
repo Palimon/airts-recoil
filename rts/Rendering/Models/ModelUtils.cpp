@@ -3,6 +3,10 @@
 #include <cassert>
 #include <string>
 #include <numeric>
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <unordered_map>
 
 #include "3DModelLog.h"
 #include "3DModelDefs.hpp"
@@ -18,11 +22,111 @@ uint16_t Skinning::GetBoneID(const SVertexData& vert, size_t wi)
 	return vert.boneIDsLow[wi] | (vert.boneIDsHigh[wi] << 8);
 };
 
+namespace {
+	// Slot 0 must hold the bone of the piece the vertex is stored in (vertex positions are in
+	// that piece's bind space and the GL4 vertex shaders treat slot 0 as the vertex's own space).
+	// Moves boneID to slot 0 (weight 0 if the vertex has no such influence) and keeps the
+	// vertex's other influences in slots 1-3 in their existing (descending) weight order, so the
+	// heaviest real influences sit where every shader reads them. If the vertex had four
+	// influences and none was boneID, the lightest one is dropped and the rest renormalized to 255.
+	void MakeBoneFirst(SVertexData& vert, uint16_t boneID)
+	{
+		if (GetBoneID(vert, 0) == boneID)
+			return;
+
+		std::array<std::pair<uint16_t, uint8_t>, SVertexData::MAX_BONES_PER_VERTEX> out;
+		out.fill({ static_cast<uint16_t>(INV_PIECE_NUM), 0 });
+		out[0] = { boneID, 0 };
+
+		size_t n = 1;
+		uint32_t dropped = 0;
+		for (size_t wi = 0; wi < out.size(); ++wi) {
+			const auto bID = GetBoneID(vert, wi);
+			const auto bW = vert.boneWeights[wi];
+
+			if (bID == boneID) {
+				out[0].second = bW;
+				continue;
+			}
+			if (bID == INV_PIECE_NUM)
+				continue;
+
+			if (n < out.size())
+				out[n++] = { bID, bW };
+			else
+				dropped += bW;
+		}
+
+		if (dropped > 0) {
+			uint32_t kept = 0;
+			for (const auto& [bID, bW] : out)
+				kept += bW;
+
+			if (kept > 0) {
+				int32_t sum = 0;
+				size_t maxIdx = 0;
+				for (size_t wi = 0; wi < out.size(); ++wi) {
+					out[wi].second = static_cast<uint8_t>(std::min<uint32_t>(255, (out[wi].second * 255u + kept / 2) / kept));
+					sum += out[wi].second;
+					if (out[wi].second > out[maxIdx].second)
+						maxIdx = wi;
+				}
+				// absorb the rounding error in the heaviest influence
+				out[maxIdx].second = static_cast<uint8_t>(std::clamp<int32_t>(out[maxIdx].second + (255 - sum), 0, 255));
+			}
+		}
+
+		for (size_t wi = 0; wi < out.size(); ++wi) {
+			vert.boneIDsLow [wi] = static_cast<uint8_t>((out[wi].first     ) & 0xFF);
+			vert.boneIDsHigh[wi] = static_cast<uint8_t>((out[wi].first >> 8) & 0xFF);
+			vert.boneWeights[wi] = out[wi].second;
+		}
+	}
+
+	// exact-match key for vertex de-duplication in ReparentMeshesTrianglesToBones
+	struct VertKey {
+		std::array<uint32_t, 3 + 3 + 2 * 2> f; // pos, normal, uv0, uv1 bit patterns
+		std::array<uint8_t, 12> b;             // bone ids low/high and weights
+
+		explicit VertKey(const SVertexData& v) {
+			const float src[] = {
+				v.pos.x, v.pos.y, v.pos.z,
+				v.normal.x, v.normal.y, v.normal.z,
+				v.texCoords[0].x, v.texCoords[0].y,
+				v.texCoords[1].x, v.texCoords[1].y,
+			};
+			static_assert(sizeof(src) == sizeof(f));
+			std::memcpy(f.data(), src, sizeof(src));
+
+			for (size_t i = 0; i < 4; ++i) {
+				b[i + 0] = v.boneIDsLow[i];
+				b[i + 4] = v.boneIDsHigh[i];
+				b[i + 8] = v.boneWeights[i];
+			}
+		}
+		bool operator == (const VertKey& o) const { return f == o.f && b == o.b; }
+	};
+
+	struct VertKeyHash {
+		size_t operator() (const VertKey& k) const {
+			uint64_t h = 1469598103934665603ull; // FNV-1a
+			const auto mix = [&h](const uint8_t* p, size_t n) {
+				for (size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 1099511628211ull; }
+			};
+			mix(reinterpret_cast<const uint8_t*>(k.f.data()), sizeof(k.f));
+			mix(k.b.data(), sizeof(k.b));
+			return static_cast<size_t>(h);
+		}
+	};
+}
+
 void Skinning::ReparentMeshesTrianglesToBones(S3DModel* model, const std::vector<SkinnedMesh>& meshes)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
 	std::vector<std::pair<size_t, size_t>> boneWeights;
+	std::vector<std::unordered_map<VertKey, uint32_t, VertKeyHash>> vertLookup(model->pieceObjects.size());
+	size_t numBadBones = 0;
 
 	for (const auto& mesh : meshes) {
 		const auto& verts = mesh.verts;
@@ -72,82 +176,45 @@ void Skinning::ReparentMeshesTrianglesToBones(S3DModel* model, const std::vector
 				}
 			}
 
+			// a triangle with no valid influence at all goes to the root piece
 			if (selectedBoneID == INV_PIECE_NUM)
-				selectedBoneID = boneWeights.begin()->first;
+				selectedBoneID = boneWeights.empty() ? 0 : boneWeights.begin()->first;
 
-			assert(selectedBoneID < model->pieceObjects.size());
+			if (selectedBoneID >= model->pieceObjects.size()) {
+				++numBadBones;
+				selectedBoneID = 0;
+			}
+
 			auto* selectedPiece = model->pieceObjects[selectedBoneID];
 
 			auto& pieceVerts = selectedPiece->GetVerticesVec();
 			auto& pieceIndcs = selectedPiece->GetIndicesVec();
+			auto& pieceLookup = vertLookup[selectedBoneID];
+
+			// seed the lookup with vertices the piece already had (first use only)
+			if (pieceLookup.empty() && !pieceVerts.empty()) {
+				for (size_t pvi = 0; pvi < pieceVerts.size(); ++pvi)
+					pieceLookup.try_emplace(VertKey(pieceVerts[pvi]), static_cast<uint32_t>(pvi));
+			}
 
 			for (size_t vi = 0; vi < 3; ++vi) {
 				auto  targVert = verts[indcs[trID * 3 + vi]]; //copy
 
-				// make sure maxWeightedBoneID comes first. It's a must, even if it doesn't exist in targVert.boneIDs!
-				const auto boneID0 = GetBoneID(targVert, 0);
-				if (boneID0 != selectedBoneID) {
-					size_t itPos = 0;
-					for (size_t jj = 1; jj < targVert.boneIDsLow.size(); ++jj) {
-						if (GetBoneID(targVert, jj) == selectedBoneID) {
-							itPos = jj;
-							break;
-						}
-					}
-					if (itPos != 0) {
-						// swap maxWeightedBoneID so it comes first in the boneIDs array
-						std::swap(targVert.boneIDsLow[0], targVert.boneIDsLow[itPos]);
-						std::swap(targVert.boneWeights[0], targVert.boneWeights[itPos]);
-						std::swap(targVert.boneIDsHigh[0], targVert.boneIDsHigh[itPos]);
-					}
-					else {
-						// maxWeightedBoneID doesn't even exist in this targVert
-						// replace the bone with the least weight with maxWeightedBoneID and swap it be first
-						targVert.boneIDsLow[3] = static_cast<uint8_t>((selectedBoneID) & 0xFF);
-						targVert.boneWeights[3] = 0;
-						targVert.boneIDsHigh[3] = static_cast<uint8_t>((selectedBoneID >> 8) & 0xFF);
-						std::swap(targVert.boneIDsLow[0], targVert.boneIDsLow[3]);
-						std::swap(targVert.boneWeights[0], targVert.boneWeights[3]);
-						std::swap(targVert.boneIDsHigh[0], targVert.boneIDsHigh[3]);
+				// the triangle's bone must come first, even if it doesn't exist in targVert's influences
+				MakeBoneFirst(targVert, static_cast<uint16_t>(selectedBoneID));
 
-						// bad idea as if the big weight was removed from the targVert.boneIDs[3], the rest will get too much of the effect
-						#if 0
-						// renormalize weights (optional but nice for debugging)
-						float sumWeights = 0.0f;
-						for (const auto& bw : targVert.boneWeights) {
-							sumWeights += bw / 255.0f;
-						}
-						for (auto& bw : targVert.boneWeights) {
-							bw = static_cast<uint8_t>(std::clamp(math::round(static_cast<float>(bw) / sumWeights), 0.0f, 255.0f));
-						}
-						#endif
-					}
-				}
+				// de-duplicate on exact position, normal, UVs and influences (hash lookup, first occurrence wins)
+				const auto [it, inserted] = pieceLookup.try_emplace(VertKey(targVert), static_cast<uint32_t>(pieceVerts.size()));
+				pieceIndcs.emplace_back(it->second);
 
-				// find if targVert is already added
-				auto itTargVec = std::find_if(pieceVerts.begin(), pieceVerts.end(), [&targVert](const auto& vert) {
-					return
-						targVert.pos.equals(vert.pos) &&
-						targVert.normal.equals(vert.normal) &&
-						targVert.boneIDsLow == vert.boneIDsLow &&
-						targVert.boneIDsHigh == vert.boneIDsHigh &&
-						targVert.boneWeights == vert.boneWeights;
-				});
-
-				// new vertex
-				if (itTargVec == pieceVerts.end()) {
-					pieceIndcs.emplace_back(static_cast<uint32_t>(pieceVerts.size()));
+				if (inserted)
 					pieceVerts.emplace_back(std::move(targVert));
-				}
-				else {
-					pieceIndcs.emplace_back(static_cast<uint32_t>(std::distance(
-						pieceVerts.begin(),
-						itTargVec
-					)));
-				}
 			}
 		}
 	}
+
+	if (numBadBones > 0)
+		LOG_SL(LOG_SECTION_MODEL, L_WARNING, "[ReparentMeshesTrianglesToBones] %u triangles referenced a bone past the piece count, moved to the root piece", static_cast<uint32_t>(numBadBones));
 
 	// transform model space mesh vertices into bone/piece space
 	for (auto* piece : model->pieceObjects) {
@@ -174,19 +241,27 @@ void Skinning::ReparentCompleteMeshesToBones(S3DModel* model, const std::vector<
 		const auto& verts = mesh.verts;
 		const auto& indcs = mesh.indcs;
 
-		boneWeights.clear();
+		// accumulate per-piece weights (the vector used to be cleared and then indexed, which is undefined behaviour)
+		boneWeights.assign(model->pieceObjects.size(), { 0, 0 });
+		for (size_t pi = 0; pi < boneWeights.size(); ++pi)
+			boneWeights[pi].first = pi;
+
 		for (const auto& vert : verts) {
 			for (size_t wi = 0; wi < 4; ++wi) {
-				boneWeights[GetBoneID(vert, wi)].second += vert.boneWeights[wi];
+				const auto bID = GetBoneID(vert, wi);
+				if (bID == INV_PIECE_NUM || bID >= boneWeights.size())
+					continue;
+
+				boneWeights[bID].second += vert.boneWeights[wi];
 			}
 		}
-		std::sort(boneWeights.begin(), boneWeights.end(), [](const auto& lhs, const auto& rhs) {
+		std::stable_sort(boneWeights.begin(), boneWeights.end(), [](const auto& lhs, const auto& rhs) {
 			return lhs.second > rhs.second;
 		});
 
+		// all-zero weights fall back to the root piece (index 0 after the stable sort)
 		const auto maxWeightedBoneID = boneWeights.begin()->first;
 
-		assert(maxWeightedBoneID < model->pieceObjects.size());
 		auto* maxWeightedPiece = model->pieceObjects[maxWeightedBoneID];
 
 		auto& pieceVerts = maxWeightedPiece->GetVerticesVec();
@@ -197,45 +272,8 @@ void Skinning::ReparentCompleteMeshesToBones(S3DModel* model, const std::vector<
 			// Unlike ReparentMeshesTrianglesToBones() do not check for already existing vertices
 			// Just copy mesh as is. Modelers and assimp should have done necessary dedup for us.
 
-			// make sure maxWeightedBoneID comes first. It's a must, even if it doesn't exist in targVert.boneIDs!
-			const auto boneID0 = GetBoneID(targVert, 0);
-			if (boneID0 != maxWeightedBoneID) {
-				size_t itPos = 0;
-				for (size_t jj = 1; jj < targVert.boneIDsLow.size(); ++jj) {
-					if (GetBoneID(targVert, jj) == maxWeightedBoneID) {
-						itPos = jj;
-						break;
-					}
-				}
-				if (itPos != 0) {
-					// swap maxWeightedBoneID so it comes first in the boneIDs array
-					std::swap(targVert.boneIDsLow[0], targVert.boneIDsLow[itPos]);
-					std::swap(targVert.boneWeights[0], targVert.boneWeights[itPos]);
-					std::swap(targVert.boneIDsHigh[0], targVert.boneIDsHigh[itPos]);
-				}
-				else {
-					// maxWeightedBoneID doesn't even exist in this targVert
-					// replace the bone with the least weight with maxWeightedBoneID and swap it be first
-					targVert.boneIDsLow[3] = static_cast<uint8_t>((maxWeightedBoneID) & 0xFF);
-					targVert.boneWeights[3] = 0;
-					targVert.boneIDsHigh[3] = static_cast<uint8_t>((maxWeightedBoneID >> 8) & 0xFF);
-					std::swap(targVert.boneIDsLow[0], targVert.boneIDsLow[3]);
-					std::swap(targVert.boneWeights[0], targVert.boneWeights[3]);
-					std::swap(targVert.boneIDsHigh[0], targVert.boneIDsHigh[3]);
-
-					// bad idea as if the big weight was removed from the targVert.boneIDs[3], the rest will get too much of the effect
-					#if 0
-					// renormalize weights (optional but nice for debugging)
-					float sumWeights = 0.0f;
-					for (const auto& bw : targVert.boneWeights) {
-						sumWeights += bw / 255.0f;
-					}
-					for (auto& bw : targVert.boneWeights) {
-						bw = static_cast<uint8_t>(std::clamp(math::round(static_cast<float>(bw) / sumWeights), 0.0f, 255.0f));
-					}
-					#endif
-				}
-			}
+			// the mesh's bone must come first, even if it doesn't exist in targVert's influences
+			MakeBoneFirst(targVert, static_cast<uint16_t>(maxWeightedBoneID));
 
 			pieceVerts.emplace_back(std::move(targVert));
 		}

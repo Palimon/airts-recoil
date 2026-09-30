@@ -35,6 +35,7 @@
  * @field airtsFork boolean AIRTS fork build (Palimon/airts-recoil); nil on stock Recoil
  * @field airtsPatchLevel integer AIRTS fork patch level (airts/PATCH_LEVEL, also the "airts-<n>" part of Engine.version); nil on stock Recoil
  * @field airtsSkinningFix boolean AIRTS patch skinning-gl4: the GL4 model and shadow vertex programs read all four bone influences and renormalise the weights
+ * @field airtsGltfLoader boolean AIRTS patch gltf-loader: glTF skins use inverseBindMatrices as the bind pose, joint lookups are bounds-checked, skinned vertices keep their heaviest influences in slots 1-2, model load is linear in vertex count
  */
 
 /***
@@ -100,6 +101,7 @@ bool LuaConstEngine::PushEntries(lua_State* L)
 		LuaPushNamedBool(L, "airtsFork", true);
 		LuaPushNamedNumber(L, "airtsPatchLevel", SpringVersion::GetAirtsPatchLevel());
 		LuaPushNamedBool(L, "airtsSkinningFix", true); // patch/skinning-gl4
+		LuaPushNamedBool(L, "airtsGltfLoader", true); // patch/gltf-loader
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "textColorCodes");

@@ -33,6 +33,7 @@ struct S3DModelPiece {
 		colvol = {};
 
 		bposeTransform.LoadIdentity();
+		bindPoseOverride.reset();
 
 		offset = ZeroVector;
 		goffset = ZeroVector;
@@ -107,6 +108,10 @@ public:
 
 	// bind-pose transform, including baked rots
 	Transform bposeTransform;
+
+	// model-space bind pose that replaces the rest-pose chain in bposeTransform
+	// (glTF skin joints whose inverseBindMatrices disagree with the node rest pose)
+	std::optional<Transform> bindPoseOverride;
 
 	// baked local-space rotations
 	std::optional<Transform> bakedTransform;
