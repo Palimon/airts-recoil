@@ -196,7 +196,7 @@ void S3DModelPiece::Shatter(float pieceChance, int modelType, int texType, int t
 
 void S3DModelPiece::SetPieceTransform(const Transform& parentTra)
 {
-	bposeTransform = parentTra * ComposeTransform(offset, ZeroVector, scale);
+	bposeTransform = bindPoseOverride.value_or(parentTra * ComposeTransform(offset, ZeroVector, scale));
 
 	for (S3DModelPiece* c : children) {
 		c->SetPieceTransform(bposeTransform);

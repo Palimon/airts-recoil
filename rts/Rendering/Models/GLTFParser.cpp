@@ -80,6 +80,7 @@ namespace Impl {
 				bool seenTex2 = false;
 
 				std::vector<std::array<std::pair<uint16_t, float>, 8>> vertexWeights;
+				size_t numBadJointRefs = 0;
 
 				if (prim.type != fastgltf::PrimitiveType::Triangles) {
 					throw content_error("A GLTF model has invalid primitive type " + std::to_string(static_cast<uint32_t>(prim.type)));
@@ -143,24 +144,27 @@ namespace Impl {
 							});
 						}
 					} break;
-					case hashString("JOINTS_0"): {
-						assert(skinPtr);
-						fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(asset, accessor, [&](const auto& val, std::size_t idx) {
-							auto& vertexWeight = vertexWeights[idx];
-							vertexWeight[0].first = static_cast<uint16_t>(skinPtr->joints[val.x()]);
-							vertexWeight[1].first = static_cast<uint16_t>(skinPtr->joints[val.y()]);
-							vertexWeight[2].first = static_cast<uint16_t>(skinPtr->joints[val.z()]);
-							vertexWeight[3].first = static_cast<uint16_t>(skinPtr->joints[val.w()]);
-						});
-					} break;
+					case hashString("JOINTS_0"):
 					case hashString("JOINTS_1"): {
-						assert(skinPtr);
+						if (skinPtr == nullptr) {
+							LOG_SL(LOG_SECTION_MODEL, L_WARNING, "[GLTFParser] node %u has %s but no skin, ignored", static_cast<uint32_t>(nodeIdx), primAttIt->name.c_str());
+							break;
+						}
+						const size_t slot0 = (primAttIt->name == "JOINTS_0") ? 0 : 4;
+						// a joint index outside skin.joints is dropped (its weight is zeroed below) instead of read out of bounds
+						const auto JointNode = [&](uint32_t ji) -> uint16_t {
+							if (ji < skinPtr->joints.size())
+								return static_cast<uint16_t>(skinPtr->joints[ji]);
+
+							++numBadJointRefs;
+							return SVertexData::INVALID_BONEID;
+						};
 						fastgltf::iterateAccessorWithIndex<fastgltf::math::uvec4>(asset, accessor, [&](const auto& val, std::size_t idx) {
 							auto& vertexWeight = vertexWeights[idx];
-							vertexWeight[4].first = static_cast<uint16_t>(skinPtr->joints[val.x()]);
-							vertexWeight[5].first = static_cast<uint16_t>(skinPtr->joints[val.y()]);
-							vertexWeight[6].first = static_cast<uint16_t>(skinPtr->joints[val.z()]);
-							vertexWeight[7].first = static_cast<uint16_t>(skinPtr->joints[val.w()]);
+							vertexWeight[slot0 + 0].first = JointNode(val.x());
+							vertexWeight[slot0 + 1].first = JointNode(val.y());
+							vertexWeight[slot0 + 2].first = JointNode(val.z());
+							vertexWeight[slot0 + 3].first = JointNode(val.w());
 						});
 					} break;
 					case hashString("WEIGHTS_0"): {
@@ -186,10 +190,17 @@ namespace Impl {
 					}
 				}
 
+			if (numBadJointRefs > 0) {
+				LOG_SL(LOG_SECTION_MODEL, L_WARNING, "[GLTFParser] node %u: %u JOINTS_n entries index past skin.joints (size %u), their influences dropped",
+					static_cast<uint32_t>(nodeIdx), static_cast<uint32_t>(numBadJointRefs), static_cast<uint32_t>(skinPtr->joints.size()));
+			}
+
 			for (auto& vertexWeight : vertexWeights) {
 				for (auto& w : vertexWeight) {
 					if (w.second == 0.0f)
 						w.first = SVertexData::INVALID_BONEID;
+					if (w.first == SVertexData::INVALID_BONEID)
+						w.second = 0.0f;
 				}
 
 				std::stable_sort(vertexWeight.begin(), vertexWeight.end(), [](const auto& lhs, const auto& rhs) {
@@ -239,18 +250,29 @@ namespace Impl {
 
 	template<typename UM>
 	void ReplaceNodeIndexWithPieceIndex(std::vector<SVertexData>& verts, const UM& nodeIdxToPieceIdx) {
+		size_t numUnmapped = 0;
 		for (auto& vert : verts) {
 			for (size_t wi = 0; wi < vert.boneIDsLow.size(); ++wi) {
 				const auto nodeIdx = Skinning::GetBoneID(vert, wi);
 				if (nodeIdx == INV_PIECE_NUM)
 					continue;
 
+				// a joint that is not a piece (outside the default scene, or inside the skinned
+				// mesh node's subtree) is bound to the root piece instead of dereferencing end()
 				const auto pIt = nodeIdxToPieceIdx.find(nodeIdx);
-				assert(pIt != nodeIdxToPieceIdx.end());
-				vert.boneIDsLow [wi] = static_cast<uint8_t>((pIt->second >> 0) & 0xFF);
-				vert.boneIDsHigh[wi] = static_cast<uint8_t>((pIt->second >> 8) & 0xFF);
+				size_t pieceIdx = 0;
+				if (pIt != nodeIdxToPieceIdx.end())
+					pieceIdx = pIt->second;
+				else
+					++numUnmapped;
+
+				vert.boneIDsLow [wi] = static_cast<uint8_t>((pieceIdx >> 0) & 0xFF);
+				vert.boneIDsHigh[wi] = static_cast<uint8_t>((pieceIdx >> 8) & 0xFF);
 			}
 		}
+
+		if (numUnmapped > 0)
+			LOG_SL(LOG_SECTION_MODEL, L_WARNING, "[GLTFParser] %u vertex influences reference joints that are not pieces, bound to the root piece", static_cast<uint32_t>(numUnmapped));
 	}
 
 	template<typename UM>
@@ -373,6 +395,83 @@ namespace Impl {
 		}
 
 		return transforms;
+	}
+
+	// Sets S3DModelPiece::bindPoseOverride for every skin joint whose bind pose, taken from the skin's
+	// inverseBindMatrices, differs from its rest pose (model.SetPieceMatrices() must have run so that
+	// bposeTransform holds the rest pose). Joints that agree keep the rest pose bit for bit.
+	// Model-space bind = meshNodeGlobal * inverse(IBM): the vertices were already moved into model
+	// space by the mesh node's global transform (TransformSkinsToModelSpace). The first skin that
+	// names a joint wins. Returns the number of overridden joints.
+	template<typename UMP, typename UMT>
+	size_t ApplyInverseBindMatrices(
+		S3DModel& model,
+		const fastgltf::Asset& asset,
+		const std::vector<std::pair<size_t, size_t>>& skinnedMeshNodes,
+		const UMP& nodeIdxToPieceIdx,
+		const UMT& modelTransforms,
+		gltfmodel::SourceConvention sourceConvention
+	) {
+		size_t numOverrides = 0;
+		size_t numRejected = 0;
+		std::vector<fastgltf::math::fmat4x4> ibms;
+
+		for (const auto& [meshNodeIdx, skinIdx] : skinnedMeshNodes) {
+			const auto& skin = asset.skins[skinIdx];
+			if (!skin.inverseBindMatrices.has_value())
+				continue;
+
+			const auto& accessor = asset.accessors[*skin.inverseBindMatrices];
+			if (accessor.type != fastgltf::AccessorType::Mat4 || accessor.count < skin.joints.size() || !accessor.bufferViewIndex.has_value()) {
+				LOG_SL(LOG_SECTION_MODEL, L_WARNING, "[GLTFParser] skin %u: unusable inverseBindMatrices accessor, rest pose used as bind pose", static_cast<uint32_t>(skinIdx));
+				continue;
+			}
+
+			ibms.assign(accessor.count, fastgltf::math::fmat4x4{});
+			fastgltf::iterateAccessorWithIndex<fastgltf::math::fmat4x4>(asset, accessor, [&](const auto& m, std::size_t idx) {
+				ibms[idx] = m;
+			});
+
+			const auto mtIt = modelTransforms.find(meshNodeIdx);
+			const Transform meshTra = (mtIt != modelTransforms.end()) ? mtIt->second : Transform{};
+
+			for (size_t ji = 0; ji < skin.joints.size(); ++ji) {
+				const auto pIt = nodeIdxToPieceIdx.find(skin.joints[ji]);
+				if (pIt == nodeIdxToPieceIdx.end())
+					continue;
+
+				auto* piece = model.pieceObjects[pIt->second];
+				if (piece->bindPoseOverride.has_value())
+					continue;
+
+				CMatrix44f mat;
+				memcpy(&mat.m[0], ibms[ji].data(), sizeof(CMatrix44f));
+				const auto [t, r, s] = mat.DecomposeIntoTRS();
+
+				// Transform holds uniform scale only; anything else keeps the rest pose
+				const float sEps = std::max(std::fabs(s.x), 1.0f) * float3::cmp_eps();
+				if (s.x <= float3::cmp_eps() || !epscmp(s.x, s.y, sEps) || !epscmp(s.x, s.z, sEps)) {
+					++numRejected;
+					continue;
+				}
+
+				const Transform ibm = gltfmodel::ToEngineSpace(Transform{ r, t, s.x }, sourceConvention);
+				const Transform bind = meshTra * ibm.InvertAffineNormalized();
+
+				if (bind.equals(piece->bposeTransform))
+					continue;
+
+				piece->bindPoseOverride = bind;
+				++numOverrides;
+			}
+		}
+
+		if (numRejected > 0)
+			LOG_SL(LOG_SECTION_MODEL, L_WARNING, "[GLTFParser] %u inverseBindMatrices with non-uniform or zero scale ignored, rest pose used", static_cast<uint32_t>(numRejected));
+		if (numOverrides > 0)
+			LOG_SL(LOG_SECTION_MODEL, L_INFO, "[GLTFParser] %u joints use their inverseBindMatrices as bind pose (differs from the rest pose)", static_cast<uint32_t>(numOverrides));
+
+		return numOverrides;
 	}
 }
 
@@ -507,6 +606,7 @@ void CGLTFParser::Load(S3DModel& model, const std::string& modelFilePath)
 	const auto modelTransforms = Impl::GetModelTransforms(asset, defaultSceneIdx, sourceConvention);
 
 	std::vector<Skinning::SkinnedMesh> allSkinnedMeshes;
+	std::vector<std::pair<size_t, size_t>> skinnedMeshNodes; // (node index, skin index)
 
 	for (size_t ni = 0; ni < asset.nodes.size(); ++ni) {
 		const auto& node = asset.nodes[ni];
@@ -523,6 +623,7 @@ void CGLTFParser::Load(S3DModel& model, const std::string& modelFilePath)
 		Impl::ReadGeometryData(asset, mesh.primitives, skinnedMesh.verts, skinnedMesh.indcs, ni, sourceConvention, &skin);
 		Impl::TransformSkinsToModelSpace(skinnedMesh.verts, ni, modelTransforms);
 		Impl::ReplaceNodeIndexWithPieceIndex(skinnedMesh.verts, nodeIdxToPieceIdx);
+		skinnedMeshNodes.emplace_back(ni, *node.skinIndex);
 	}
 
 	// non-skinning case
@@ -549,6 +650,10 @@ void CGLTFParser::Load(S3DModel& model, const std::string& modelFilePath)
 	if (!allSkinnedMeshes.empty()) {
 		// Skinning::<> code below needs correct bposeTransforms
 		model.SetPieceMatrices();
+
+		// the rest pose is the bind pose unless the skin's inverseBindMatrices say otherwise
+		if (Impl::ApplyInverseBindMatrices(model, asset, skinnedMeshNodes, nodeIdxToPieceIdx, modelTransforms, sourceConvention) > 0)
+			model.SetPieceMatrices();
 
 		// if numMeshes >= numBones reparent the whole meshes
 		// else reparent meshes per-triangle
