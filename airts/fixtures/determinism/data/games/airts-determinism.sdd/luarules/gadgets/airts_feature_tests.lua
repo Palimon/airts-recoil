@@ -50,7 +50,7 @@ end
 
 local function spinTurret(u)
   local turret = Spring.GetUnitPieceMap(u).turret
-  Spring.UnitScript.CallAsUnit(u, Spring.UnitScript.Spin, turret, 2, math.rad(90))
+  Spring.UnitScript.CallAsUnit(u, Spring.UnitScript.Spin, turret, 2, math.rad(30))
 end
 
 function gadget:Initialize()
