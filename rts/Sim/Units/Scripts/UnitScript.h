@@ -49,7 +49,7 @@ protected:
 	using AnimContainerType = std::vector<AnimInfo>;
 	using AnimContainerTypeIt = AnimContainerType::iterator;
 
-	using TickAnimFunc = bool(CUnitScript::*)(int, LocalModelPiece&, AnimInfo&);
+	using TickAnimFunc = bool(CUnitScript::*)(float, LocalModelPiece&, AnimInfo&);
 
 	AnimContainerType anims;
 	AnimContainerType doneAnims;
@@ -62,7 +62,7 @@ protected:
 	bool MoveToward(float& cur, float dest, float speed);
 	bool TurnToward(float& cur, float dest, float speed);
 	bool ScaleToward(float& cur, float dest, float speed);
-	bool DoSpin(float& cur, float dest, float& speed, float accel, int divisor);
+	bool DoSpin(float& cur, float dest, float& speed, float accel, float divisor);
 
 	AnimContainerTypeIt FindAnim(AnimType type, int piece, int axis);
 	void RemoveAnim(AnimType type, const AnimContainerTypeIt& animInfoIt);
@@ -120,10 +120,10 @@ public:
 	void TickAllAnims(int tickRate);
 	bool TickAnimFinished();
 	// note: must copy-and-set here (LMP dirty flag, etc)
-	bool TickMoveAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai);
-	bool TickTurnAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai);
-	bool TickSpinAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai);
-	bool TickScaleAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai);
+	bool TickMoveAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai);
+	bool TickTurnAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai);
+	bool TickSpinAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai);
+	bool TickScaleAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai);
 
 	// animation, used by CCobThread
 	void Spin(int piece, int axis, float speed, float accel);

@@ -351,6 +351,9 @@ bool CBuilder::UpdateBuild(const Command& fCommand)
 	if (curBuildee->buildProgress >= 1.0f)
 		adjBuildSpeed = std::min(repairSpeed, unitDef->maxRepairSpeed * 0.5f - curBuildee->repairAmount); // repair
 
+	// AIRTS unit-tempo: build and repair power scale with the builder's tempo
+	adjBuildSpeed *= tempo;
+
 	if (adjBuildSpeed > 0.0f && curBuildee->AddBuildPower(this, adjBuildSpeed)) {
 		CreateNanoParticle(curBuildee->midPos, curBuildee->radius * 0.5f, false, false, curBuildee, true);
 		return true;

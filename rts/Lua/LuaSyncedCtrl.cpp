@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cctype>
+#include <cmath>
 
 #include "LuaSyncedCtrl.h"
 
@@ -194,6 +195,7 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetUnitMaxHealth);
 	REGISTER_LUA_CFUNC(SetUnitStockpile);
 	REGISTER_LUA_CFUNC(SetUnitUseWeapons);
+	REGISTER_LUA_CFUNC(SetUnitTempo);
 	REGISTER_LUA_CFUNC(SetUnitWeaponState);
 	REGISTER_LUA_CFUNC(SetUnitWeaponDamages);
 	REGISTER_LUA_CFUNC(SetUnitMaxRange);
@@ -2585,6 +2587,35 @@ int LuaSyncedCtrl::SetUnitUseWeapons(lua_State* L)
 
 	unit->forceUseWeapons = luaL_optboolean(L, 2, unit->forceUseWeapons);
 	unit->allowUseWeapons = luaL_optboolean(L, 3, unit->allowUseWeapons);
+	return 0;
+}
+
+/***
+ * AIRTS unit-tempo patch (Engine.FeatureSupport.airtsUnitTempo): sets the rate of the unit's
+ * local time. It scales movement speed, acceleration and turn rate, MoveCtrl motion, weapon
+ * reload and salvo timers, the speed of the unit's shots (their lifetime scales inversely),
+ * build and repair power, script animations (Turn, Move, Spin, scale), autoheal, stun decay
+ * and the self-destruct countdown. 0 freezes the unit: it does not move, turn, aim or fire,
+ * and its animations stop. There is no upper bound.
+ *
+ * @function Spring.SetUnitTempo
+ * @param unitID UnitID
+ * @param tempo number 1 is normal time; must be finite and at least 0
+ * @return nil
+ */
+int LuaSyncedCtrl::SetUnitTempo(lua_State* L)
+{
+	CUnit* unit = ParseUnit(L, __func__, 1);
+
+	if (unit == nullptr)
+		return 0;
+
+	const float tempo = luaL_checkfloat(L, 2);
+
+	if (!(tempo >= 0.0f) || !std::isfinite(tempo))
+		luaL_error(L, "[%s] tempo must be a finite number at least 0 (got %f)", __func__, tempo);
+
+	unit->SetTempo(tempo);
 	return 0;
 }
 

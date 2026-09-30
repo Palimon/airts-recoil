@@ -248,7 +248,8 @@ void CFactory::UpdateBuild(CUnit* buildee) {
 		return;
 	}
 
-	if (!buildee->AddBuildPower(this, buildSpeed))
+	// AIRTS unit-tempo: build power scales with the factory's tempo
+	if (!buildee->AddBuildPower(this, buildSpeed * tempo))
 		return;
 
 	CreateNanoParticle();

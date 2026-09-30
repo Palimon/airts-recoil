@@ -449,7 +449,7 @@ static float3 CalcSpeedVectorExclGravity(const CUnit* owner, const CGroundMoveTy
 		return ZeroVector;
 	else {
 		float vel = owner->speed.w;
-		float maxSpeed = owner->moveType->GetMaxSpeed();
+		float maxSpeed = owner->moveType->GetMaxSpeed() * owner->GetMoveSpeedMult();
 		const float effectiveMaxSpeed = maxSpeed * mt->GetTerrainSpeedMod();
 		if (vel > effectiveMaxSpeed) {
 			// Once a unit is travelling faster than their maximum speed, their engine power is no longer sufficient to counteract
@@ -683,6 +683,13 @@ void CGroundMoveType::UpdatePreCollisions()
 
 void CGroundMoveType::UpdateUnitPosition() {
 	resultantForces = ZeroVector;
+
+	// AIRTS unit-tempo: a frozen unit neither moves nor turns
+	if (owner->IsTimeFrozen()) {
+		deltaSpeed = 0.0f;
+		owner->SetVelocityAndSpeed(ZeroVector);
+		return;
+	}
 
 	if (owner->IsSkidding()) return;
 
@@ -1412,12 +1419,17 @@ void CGroundMoveType::ChangeSpeed(float newWantedSpeed, bool wantReverse, bool f
 		}
 	}
 
+	// AIRTS unit-tempo and speed multiplier: scale the final speed target, after the turn,
+	// terrain, braking and wanted-speed limits (and the cap in CalcSpeedVectorExclGravity);
+	// maxSpeed itself is never scaled, so nothing divides by a scaled 0
+	targetSpeed *= owner->GetMoveSpeedMult();
+
 	deltaSpeed = pathController.GetDeltaSpeed(
 		pathID,
 		targetSpeed,
 		currentSpeed,
-		accRate,
-		decRate,
+		accRate * owner->GetTempo(),
+		decRate * owner->GetTempo(),
 		wantReverse,
 		reversing
 	);
@@ -1442,7 +1454,7 @@ void CGroundMoveType::ChangeHeading(short newHeading) {
 	}
 
 	#if (MODEL_TURN_INERTIA == 0)
-	const short rawDeltaHeading = pathController.GetDeltaHeading(pathID, wantedHeading, owner->heading, turnRate);
+	const short rawDeltaHeading = pathController.GetDeltaHeading(pathID, wantedHeading, owner->heading, turnRate * owner->GetTempo());
 	#else
 	// model rotational inertia (more realistic for ships)
 	const short rawDeltaHeading = pathController.GetDeltaHeading(pathID, wantedHeading, owner->heading, turnRate, turnAccel, BrakingDistance(turnSpeed, turnAccel), &turnSpeed);

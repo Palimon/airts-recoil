@@ -38,7 +38,8 @@ void GeneralMoveSystem::Update() {
             unit->SanityCheck();
             #endif
 
-            if (moveType->Update())
+            // AIRTS unit-tempo: a frozen unit's movetype (air, MoveCtrl, static) does not run
+            if (!unit->IsTimeFrozen() && moveType->Update())
                 eventHandler.UnitMoved(unit);
 
             // this unit is not coming back, kill it now without any death

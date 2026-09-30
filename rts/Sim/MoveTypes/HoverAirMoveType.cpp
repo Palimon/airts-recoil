@@ -431,7 +431,7 @@ void CHoverAirMoveType::UpdateHovering()
 	// LANDING
 	wantedSpeed = (randomWind * absHoverFactor * (1 - UnitHasLoadCmd(owner)) * (dontLand || curSqGoalDist > maxSqGoalDist));
 	wantedSpeed += (smoothstep(0.0f, 20.0f * 20.0f, float3::fabs(goalPos - owner->pos)) * (goalPos - owner->pos));
-	wantedSpeed = float3::min(float3::fabs(wantedSpeed), OnesVector * maxSpeed) * float3::sign(wantedSpeed);
+	wantedSpeed = float3::min(float3::fabs(wantedSpeed), OnesVector * (maxSpeed * owner->GetMoveSpeedMult())) * float3::sign(wantedSpeed);
 
 	UpdateAirPhysics();
 }
@@ -550,7 +550,7 @@ void CHoverAirMoveType::UpdateFlying()
 	const float brakeDist = (0.5f * curSpeed * curSpeed) / decRate;
 	const float goalDist = goalVec.Length() + 0.1f;
 	const float goalSpeed =
-		(maxSpeed          ) * (goalDist >  brakeDist) +
+		(maxSpeed * owner->GetMoveSpeedMult()) * (goalDist >  brakeDist) +
 		(curSpeed - decRate) * (goalDist <= brakeDist);
 
 	if (goalDist > goalSpeed) {

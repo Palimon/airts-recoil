@@ -15,6 +15,9 @@ struct ProjectileParams {
 	float3 pos;
 	float3 end;
 	float3 speed;
+	// AIRTS unit-tempo: multiplier on <speed> (and divisor of <ttl>) applied when a weapon's
+	// shot is created; set from the firing unit's tempo in CWeapon::GetProjectileParams
+	float tempoSpeedScale = 1.0f;
 	float3 spread;
 	float3 error;
 

@@ -1347,6 +1347,7 @@ ProjectileParams CWeapon::GetProjectileParams()
 	params.weaponNum = weaponNum;
 	params.owner = owner;
 	params.weaponDef = weaponDef;
+	params.tempoSpeedScale = owner->GetTempo();
 
 	switch (currentTarget.type) {
 		case Target_None     : {                                          } break;
