@@ -27,8 +27,12 @@ Zeus, check `tasklist` for other `spring` processes (the tester runs gates on Ze
 
 The native Linux build links against Ubuntu 24.04's system libraries (SDL2, OpenAL, DevIL,
 GLEW and the rest), so it runs on Ubuntu 24.04 hosts such as Tokyo but is not a portable
-release. A portable Linux archive for players comes from `docker-build-v2/build.sh linux`
-(measured on Tokyo, below).
+release (it needs glibc 2.38 and GLIBCXX 3.4.32). A portable Linux archive for players comes
+from `docker-build-v2/build.sh linux`, also run on Zeus WSL (times below). Start `dockerd` as
+WSL root if `docker info` fails and stop it afterwards; run `build.sh` as `palimon`, since git
+as root fails on "dubious ownership" in this clone. Store `build-amd64-linux/install` as
+`~/airts-builds/airts-main-<hash>/linux-portable`, with `--sync-version`, the binaries' sha256
+and an `objdump -T` scan (highest `GLIBC_` and `GLIBCXX_`) beside it.
 
 Copy the Linux tree to Tokyo for tests there (from Git Bash on Zeus):
 
@@ -49,6 +53,10 @@ Zeus WSL, 2026-09-30, `airts/main` at `1fec2d87d9`, no other build running (meas
 
 After the glTF loader merge (`767814c5fe`, four model files changed), with the cache warm: Windows 60 s, Linux 90 s.
 
+Portable Linux on Zeus WSL, 2026-09-30, `68a2484c38`, `build.sh --jobs 12 linux` with
+`--cpus=12` and the container's processes at nice 15, cold cache, including the image pull
+(measured): 626 s (10 min 26 s).
+
 Tokyo, 2026-09-30, `dc05e27162`, both cold at `--jobs 12` while other agents' engines kept the
 load average between 60 and 260 (upper bounds, kept for reference):
 
@@ -63,6 +71,7 @@ The spike's Windows cross-compile on Zeus WSL took 16 min 15 s.
 
 | Commit | Where | Sync version |
 |---|---|---|
+| `68a2484c38`, portable Linux (docker-build-v2, 2026-09-30; ships in the AIRTS 0.0 Linux player package) | Zeus `~/airts-builds/airts-main-68a2484/linux-portable` plus `sync-version-linux-portable.txt`, `sha256-linux-portable.txt` and `abi-scan.txt` beside it; copy on Tokyo `~/recoil-spike/builds/airts-main-68a2484-linux-portable`. Newest glibc symbol 2.27, no GLIBCXX requirement (libstdc++ static); the graphical `spring` needs the system's SDL2, X11, Xcursor and OpenAL. sha256: `spring` `6ef589d6996ccdef42b6b401eead2ab940fcecadd471dad1408cfb7a5f299baf`, `spring-headless` `05021ca718498520e29b8aa762e9437c8670901df2422a3e90e9d7cc07f36b42`, `spring-dedicated` `aaca191c254136aa4523edbdb35475ee9c174aa3635349864a54a2ada4331c38`. The CI artifact was not used: CI builds on an `ubuntu-24.04` runner, not portable | `2026.09.01-31-g68a2484 airts-6` |
 | `68a2484c38` (patch level 6: unit-tempo, unit-speedmult, creg-mtdrawsafe; for rc09) | Zeus `~/airts-builds/airts-main-68a2484c38/{linux,windows}` plus `windows-manifest.sha256` (sha256 of the manifest `aaf20daab1137caf1c4d208cbc62e45b7f5c80be7800b0523b333808dd98b36b`); Linux copy on Tokyo `~/recoil-spike/builds/airts-main-68a2484c38/linux` | `2026.09.01-31-g68a2484 airts-6` |
 | `767814c5fe` (patch level 3, release candidate rc06b) | Zeus `~/airts-builds/airts-main-767814c5fe/{linux,windows}` plus `windows-manifest.sha256` (sha256 of the manifest `e7651f2002099d6a0021f30831bdb0bcee3647f222049307f71851bf3bc54a0b`); Linux copy on Tokyo `~/recoil-spike/builds/airts-main-767814c5fe/linux` | `2026.09.01-21-g767814c airts-3` |
 | `1fec2d87d9` | Zeus `~/airts-builds/airts-main-1fec2d87d9/{linux,windows}`; Linux copy on Tokyo `~/recoil-spike/builds/airts-main-1fec2d87d9/linux` | `2026.09.01-16-g1fec2d8 airts-2` |
