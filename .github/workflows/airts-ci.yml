@@ -67,7 +67,12 @@ jobs:
           echo "sync version: $V"
           echo "$V" | grep -Eq ' airts-[0-9]+$' || { echo "sync version has no airts-<n> suffix"; exit 1; }
           echo "$V" | grep -q "g$(git rev-parse --short=7 HEAD)" || { echo "sync version does not name HEAD"; exit 1; }
-          ./install/spring-dedicated --sync-version | tail -1
+          # spring-dedicated --sync-version prints nothing (it LOGs before the log sink exists,
+          # rts/builds/dedicated/main.cpp:71-74), so read the string from the binary instead
+          D=$(strings -n 12 install/spring-dedicated | grep -m1 -E ' airts-[0-9]+$')
+          echo "dedicated: $D"
+          [ "$D" = "$V" ] || { echo "spring-dedicated carries a different version string"; exit 1; }
+          echo "$V" | grep -q " airts-$(cat airts/PATCH_LEVEL)\$" || { echo "patch level differs from airts/PATCH_LEVEL"; exit 1; }
       - name: Pack install tree
         run: tar -C install -czf engine-linux.tgz .
       - uses: actions/upload-artifact@v4
@@ -130,6 +135,7 @@ jobs:
         run: |
           grep -h -o 'AIRTS_FEATURES .*' det-1thread/run-a/stdout.log | tee features.txt
           grep -q 'airtsFork=true' features.txt
+          grep -q "airtsPatchLevel=$(cat airts/PATCH_LEVEL) " features.txt
       - name: Multi-threaded determinism (known upstream issue, not gating)
         continue-on-error: true
         run: AIRTS_DET_THREADS=default airts/scripts/determinism.sh install/spring-headless det-mt

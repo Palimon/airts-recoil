@@ -47,6 +47,8 @@ Zeus WSL, 2026-09-30, `airts/main` at `1fec2d87d9`, no other build running (meas
 | Windows, `docker-build-v2/build.sh windows` (all 24 threads) | 659 s (10 min 59 s) | 25 s |
 | Linux native, full tree plus install | 468 s (7 min 48 s) | 61 s |
 
+After the glTF loader merge (`767814c5fe`, four model files changed), with the cache warm: Windows 60 s, Linux 90 s.
+
 Tokyo, 2026-09-30, `dc05e27162`, both cold at `--jobs 12` while other agents' engines kept the
 load average between 60 and 260 (upper bounds, kept for reference):
 
@@ -61,6 +63,7 @@ The spike's Windows cross-compile on Zeus WSL took 16 min 15 s.
 
 | Commit | Where | Sync version |
 |---|---|---|
+| `767814c5fe` (patch level 3, release candidate rc06b) | Zeus `~/airts-builds/airts-main-767814c5fe/{linux,windows}` plus `windows-manifest.sha256` (sha256 of the manifest `e7651f2002099d6a0021f30831bdb0bcee3647f222049307f71851bf3bc54a0b`); Linux copy on Tokyo `~/recoil-spike/builds/airts-main-767814c5fe/linux` | `2026.09.01-21-g767814c airts-3` |
 | `1fec2d87d9` | Zeus `~/airts-builds/airts-main-1fec2d87d9/{linux,windows}`; Linux copy on Tokyo `~/recoil-spike/builds/airts-main-1fec2d87d9/linux` | `2026.09.01-16-g1fec2d8 airts-2` |
 | `dc05e27162` | Tokyo `~/recoil-spike/builds/airts-main-dc05e27162/{linux,windows}` (docker, portable Linux) | `2026.09.01-13-gdc05e27 airts-2` |
 

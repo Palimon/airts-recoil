@@ -58,10 +58,14 @@ local function census(n)
 end
 
 function gadget:Initialize()
-  -- the fork's feature flags as game Lua sees them (nil on stock Recoil)
-  local fs = Engine.FeatureSupport or {}
-  Spring.Echo(string.format("AIRTS_FEATURES airtsFork=%s airtsPatchLevel=%s airtsSkinningFix=%s version=%s",
-    tostring(fs.airtsFork), tostring(fs.airtsPatchLevel), tostring(fs.airtsSkinningFix), tostring(Engine.version)))
+  -- every fork feature flag as game Lua sees it (all nil on stock Recoil), sorted by key
+  local fs, keys, parts = Engine.FeatureSupport or {}, {}, {}
+  for k in pairs(fs) do
+    if type(k) == "string" and k:sub(1, 5) == "airts" then keys[#keys + 1] = k end
+  end
+  table.sort(keys)
+  for i = 1, #keys do parts[#parts + 1] = keys[i] .. "=" .. tostring(fs[keys[i]]) end
+  Spring.Echo("AIRTS_FEATURES " .. table.concat(parts, " ") .. " version=" .. tostring(Engine.version))
 end
 
 function gadget:GameOver()

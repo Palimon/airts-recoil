@@ -305,3 +305,17 @@ Tokyo, stored in `~/recoil-spike/builds/airts-main-dc05e27162/linux/`; sync vers
   spec says to ignore it; the bind pose composes it, so the result matches the spec), and the
   bone-space loop in both reparent functions also transforms pieces that were already local in
   files that mix skinned and unskinned meshes.
+
+#### Gate result for gltf-loader on the merge (2026-09-30)
+
+Merge `767814c5fe` (`--no-ff`, patch level 3). Build: Zeus WSL, `airts/scripts/build-release-zeus.sh`, Linux copy on
+Tokyo `~/recoil-spike/builds/airts-main-767814c5fe/linux`; sync version `2026.09.01-21-g767814c airts-3` on Linux and
+Windows. Branch CI: run 36676111515 green (build, 27 of 27 gating unit tests, determinism 2108/2108).
+
+1. Fixture on Tokyo, single-threaded, through `engine-slot.sh`: GameOver 2108 on both runs, identical census, last
+   `AIRTS_CENSUS frame=2100 units=6/1 hp=1585 hash=56095`, as stock.
+2. Cogwright single-process match, default threads, two runs: exit 0, `AIRTS_GAMEOVER winners=0 frame=32465` both
+   (stock 32465), 65 markers, 68 burn-unit lines (34, 17, 17), 20 AI waves, zero error and sync lines; every count
+   equals stock. Peak RSS 4.10 GB.
+3. The patch author's own gate on the branch build `2026.09.01-19-g4953050 airts-3` gave the same frames.
+4. Watched check on Zeus: the tester's GPU gate with this build (pending).
