@@ -114,6 +114,7 @@ class LuaSyncedRead {
 		static int GetUnitIsDead(lua_State* L);
 		static int GetUnitIsStunned(lua_State* L);
 		static int GetUnitTempo(lua_State* L);
+		static int GetUnitSpeedMult(lua_State* L);
 		static int GetUnitIsBeingBuilt(lua_State* L);
 		static int GetUnitCosts(lua_State* L);
 		static int GetUnitCostTable(lua_State* L);

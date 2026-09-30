@@ -168,9 +168,11 @@ public:
 	bool IsTimeFrozen() const { return (tempo == 0.0f); }
 	float GetTempo() const { return tempo; }
 	void SetTempo(float t) { tempo = t; }
-	// multiplier on the unit's movement speed: tempo (and, with the speed-multiplier patch,
-	// the per-unit speed multiplier)
-	float GetMoveSpeedMult() const { return tempo; }
+	// AIRTS unit-speedmult: speed-only multiplier (no acceleration, turn or timer effect)
+	float GetSpeedMult() const { return speedMult; }
+	void SetSpeedMult(float m) { speedMult = m; }
+	// multiplier on the unit's movement speed: tempo times the speed multiplier
+	float GetMoveSpeedMult() const { return tempo * speedMult; }
 
 	void SetNeutral(bool b);
 	void SetStunned(bool stun);
@@ -391,6 +393,9 @@ public:
 
 	// AIRTS unit-tempo: rate of the unit's local time (1 normal, 0 frozen; no upper bound)
 	float tempo = 1.0f;
+	// AIRTS unit-speedmult: multiplier on movement speed only (1 normal, 0 holds the unit;
+	// no upper bound); applies to ground, hover-air and MoveCtrl motion
+	float speedMult = 1.0f;
 	// frames of real time not yet applied to the unit's frame-stamped timers (weapon reload
 	// and salvo); whole frames are applied each Update
 	float tempoFrameLag = 0.0f;

@@ -2924,6 +2924,7 @@ CR_REG_METADATA(CUnit, (
 
 	CR_MEMBER(reloadSpeed),
 	CR_MEMBER(tempo),
+	CR_MEMBER(speedMult),
 	CR_MEMBER(tempoFrameLag),
 	CR_MEMBER(selfDTempoAccum),
 	CR_MEMBER(maxRange),

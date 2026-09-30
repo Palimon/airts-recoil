@@ -196,6 +196,7 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetUnitStockpile);
 	REGISTER_LUA_CFUNC(SetUnitUseWeapons);
 	REGISTER_LUA_CFUNC(SetUnitTempo);
+	REGISTER_LUA_CFUNC(SetUnitSpeedMult);
 	REGISTER_LUA_CFUNC(SetUnitWeaponState);
 	REGISTER_LUA_CFUNC(SetUnitWeaponDamages);
 	REGISTER_LUA_CFUNC(SetUnitMaxRange);
@@ -2616,6 +2617,35 @@ int LuaSyncedCtrl::SetUnitTempo(lua_State* L)
 		luaL_error(L, "[%s] tempo must be a finite number at least 0 (got %f)", __func__, tempo);
 
 	unit->SetTempo(tempo);
+	return 0;
+}
+
+/***
+ * AIRTS unit-speedmult patch (Engine.FeatureSupport.airtsUnitSpeedMult): multiplies the unit's
+ * movement speed only (not acceleration, turn rate, weapons or timers). It applies to the ground
+ * movetype's speed target, the hover-air speed target and MoveCtrl motion, including while the
+ * unit is under MoveCtrl. 0 holds the unit in place with no floor (a ground unit decelerates to
+ * 0 and can still turn; a MoveCtrl unit does not move). There is no upper bound. It multiplies
+ * with the unit's tempo.
+ *
+ * @function Spring.SetUnitSpeedMult
+ * @param unitID UnitID
+ * @param mult number 1 is normal speed; must be finite and at least 0
+ * @return nil
+ */
+int LuaSyncedCtrl::SetUnitSpeedMult(lua_State* L)
+{
+	CUnit* unit = ParseUnit(L, __func__, 1);
+
+	if (unit == nullptr)
+		return 0;
+
+	const float mult = luaL_checkfloat(L, 2);
+
+	if (!(mult >= 0.0f) || !std::isfinite(mult))
+		luaL_error(L, "[%s] mult must be a finite number at least 0 (got %f)", __func__, mult);
+
+	unit->SetSpeedMult(mult);
 	return 0;
 }
 
