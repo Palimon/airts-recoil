@@ -69,6 +69,12 @@ namespace SpringVersion
 	 */
 	extern const std::string& GetBranch();
 
+	/**
+	 * AIRTS fork patch level (airts/PATCH_LEVEL), exposed to Lua as
+	 * Engine.FeatureSupport.airtsPatchLevel.
+	 */
+	extern int GetAirtsPatchLevel();
+
 	/// additional information (compiler flags, VCS revision etc.)
 	extern const std::string& GetAdditional();
 

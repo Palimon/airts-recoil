@@ -35,6 +35,9 @@ static constexpr const char* SPRING_VERSION_ENGINE_ADDITIONAL = "@SPRING_VERSION
 /// examples: true, false
 static constexpr bool        SPRING_VERSION_ENGINE_RELEASE    = @SPRING_VERSION_ENGINE_RELEASE@;
 
+/// AIRTS fork patch level (airts/PATCH_LEVEL); also the "airts-<n>" branch part of SPRING_VERSION_ENGINE
+static constexpr int         AIRTS_PATCH_LEVEL                = @AIRTS_PATCH_LEVEL@;
+
 #endif // VERSION_GENERATED_H
 
  

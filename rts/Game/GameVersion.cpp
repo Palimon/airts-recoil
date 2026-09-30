@@ -53,6 +53,11 @@ const std::string& GetBranch()
 	return patchSet;
 }
 
+int GetAirtsPatchLevel()
+{
+	return AIRTS_PATCH_LEVEL;
+}
+
 inline const std::string CreateAdditionalVersion()
 {
 	std::string additional = SPRING_VERSION_ENGINE_ADDITIONAL;
