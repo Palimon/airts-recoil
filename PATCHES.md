@@ -137,6 +137,32 @@ frames, and `game_end` declares the winner. It uses no BAR content.
   Not yet bisected, not yet reported upstream. The Cogwright match did not show it (GameOver
   frame 32465 on every run) and the spike's networked runs had zero sync errors, but a
   multiplayer desync is the risk. The CI gate runs single-threaded until this is understood.
+  Triage 2026-09-30 (fixture, 6 concurrent runs per engine, default threads, through
+  `engine-slot.sh` on Tokyo): upstream's prebuilt Linux releases 2026.06.12, 2026.07.03,
+  2026.07.04 and 2026.09.01 are all non-deterministic (4 distinct end states each out of 6), as is
+  ff8e2a1 (3 of 6). No upstream release exists after ff8e2a1. So it is not a recent regression:
+  it predates 2026.06.12. The frame-300 census hash changed between 2026.07.04 (3770) and
+  2026.09.01 (44603), so the movement code itself changed in that window. Arena matches did repeat:
+  the Cogwright 0.3 arena match cog versus teph, seed 2003, ran 4 times with default threads
+  and ended at GameOver frame 27805 with sync checksum `1a62d337` every time, the same as the
+  arena round's original run.
+- **QTPFS crashes in background path searches with more than one worker thread.** Rules 0.5
+  switched to QTPFS (`pathFinderSystem = 1`); 5 of 36 arena games segfaulted on ff8e2a1 in
+  `SharedFinalize`/`IPath::SetSourcePoint`, `SmoothPathIter`, `LoadPartialPath` and
+  `IPath::SetPoint`, always on a worker inside `PathManager::ExecuteQueuedSearches`'
+  `for_mt_background` task (`rts/Sim/Path/QTPFS/PathManager.cpp:1096`). One crashed start script
+  run 4 times: QTPFS with default threads crashed 3 times at 3 different frames; QTPFS with
+  `WorkerThreadCount = 1` finished 4 times at the same frame (51345); HAPFS finished 4 times at the
+  same frame (14850). Upstream master is still ff8e2a1, so there is no upstream fix to take.
+  Games ship HAPFS (`pathFinderSystem = 0`) until this is fixed. Upstream issue draft:
+  `airts/upstream/qtpfs-background-search-crash.md` (not filed).
+- **No stack trace when core dumps are enabled.** `CrashHandler::Install`
+  (`rts/System/Platform/Linux/CrashHandler.cpp:1039-1045`) installs no signal handler when
+  `RLIMIT_CORE` is above 0 and logs `Core dumps enabled, not installing signal handler`; a crash
+  then exits 139 with no trace (arena game cog-quiet-s2-0 on the docker host 192.168.1.175).
+  Setting: launch every engine with a core limit of 0 (`ulimit -c 0` in the launching shell, or
+  `docker run --ulimit core=0` for a container), and the handler is installed and prints the
+  trace. Tokyo's shells have `ulimit -c 0` already.
 
 - **testCreg fails at the base commit.** Upstream a53282a (2026-09-07, "Particle draw
   optimizations") added `bool mtDrawSafe` to `CProjectile` (`rts/Sim/Projectiles/Projectile.h:121`)
