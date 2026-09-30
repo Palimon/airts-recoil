@@ -79,6 +79,7 @@ fallback> end`.
 | `airtsFork` | boolean | fork plumbing |
 | `airtsPatchLevel` | integer, `airts/PATCH_LEVEL` | fork plumbing |
 | `airtsSkinningFix` | boolean | `patch/skinning-gl4` |
+| `airtsGltfLoader` | boolean | `patch/gltf-loader` |
 
 ## The gate every patch passes before it merges
 
@@ -215,3 +216,66 @@ Tokyo, stored in `~/recoil-spike/builds/airts-main-dc05e27162/linux/`; sync vers
 4. Cross-platform run: not needed (no simulation code changed).
 5. Watched check on Zeus: pending with this build; the shader fix itself was checked on a real
    GPU before it entered the fork.
+
+### 002 gltf-loader (`patch/gltf-loader`, 2026-09-30)
+
+- Flag: `Engine.FeatureSupport.airtsGltfLoader`. Patch level 3.
+- Symptoms and causes, in `rts/Rendering/Models` at the base commit:
+  1. `GLTFParser` never reads `skin.inverseBindMatrices`, so the rest pose is always the bind
+     pose and converters had to rewrite the matrices to match it.
+  2. `skinPtr->joints[val.x()]` has no bounds check (`GLTFParser.cpp:150-153`, `160-163`), and a
+     joint that is not a piece dereferences `end()` (`ReplaceNodeIndexWithPieceIndex`).
+  3. `ReparentCompleteMeshesToBones` clears `boneWeights` and then indexes it
+     (`ModelUtils.cpp:177-180`).
+  4. Vertex de-duplication in `ReparentMeshesTrianglesToBones` is a linear search per vertex
+     (`ModelUtils.cpp:128`), quadratic per piece, and its key ignores UVs.
+  5. The slot swap (`ModelUtils.cpp:106-111`, `219-224`) can move a vertex's heaviest influence
+     into slot 3, which the stock GL4 shaders do not read, and overwrites the fourth influence;
+     this is the cause behind patch 001.
+- Fix:
+  1. A skin joint whose bind pose (mesh node global transform times the inverse of its inverse
+     bind matrix, in engine axes) differs from its rest pose gets
+     `S3DModelPiece::bindPoseOverride`, which `SetPieceTransform` uses for `bposeTransform`.
+     Joints that agree keep the rest pose bit for bit; non-uniform or zero scale is rejected
+     with a warning.
+  2. An out-of-range joint index drops that influence with a warning; a joint that is not a
+     piece binds to the root piece with a warning.
+  3. `ReparentCompleteMeshesToBones` sums weights into a table sized to the piece count.
+  4. De-duplication uses a hash map per piece keyed on the exact position, normal, both UV sets
+     and the influences; the first occurrence wins, so vertex order is unchanged.
+  5. Slot order: slot 0 holds the triangle's bone (weight 0 if the vertex lacks it) and the
+     vertex's other influences keep their descending order in slots 1-3; only the lightest is
+     dropped, and the rest are renormalised to 255.
+- Deviation from the request "heaviest influence in slot 0": slot 0 must be the bone of the
+  piece the triangle is stored in, because the vertex positions are stored in that bone's bind
+  space and the vertex programs treat slot 0 as the vertex's own space. The heaviest other
+  influences therefore go to slots 1-2, which even the stock three-slot shader reads, so a
+  single-influence vertex can no longer become (0,0,0,0); patch 001 stays as a safety net.
+- Sync: only model loading changes (`3DModelPiece.hpp`, `3DModelPiece.cpp`, `GLTFParser.cpp`,
+  `ModelUtils.cpp`). Model data reaches the simulation through piece vertices 0 and 1 (emit
+  position and direction) and piece bounds. These change only for third-party files whose
+  inverse bind matrices differ from the rest pose; all 22 skinned models in our four faction
+  archives match their rest pose to 7e-7, so no override triggers, de-duplication keeps the
+  vertex order, and bone slots and weights are GPU-only.
+- Proof (Tokyo, Xvfb llvmpipe GL4, evidence in the showcase handoff folder,
+  `engine-patches/002-gltf-loader/evidence/`): the posed tinker_s_crank renders the same as with
+  the stock engine (0 pixels differ by more than 24/255); a test copy whose bone_6 has a 0.9 rad
+  rest rotation but its original inverse bind matrix shows the limb bent at rest, as the glTF
+  spec requires, where stock shows it straight. "Finalizing Models" (spring-headless, faction
+  archives v0.2, from that log line to the next, two runs each):
+
+  | Archive | Stock | Patched |
+  |---|---|---|
+  | cog | 10.5 s, 10.3 s | 0.20 s, 0.20 s |
+  | kaet | 13.7 s, 14.3 s | 0.30 s, 0.20 s |
+  | quiet | 14.1 s, 13.3 s | 0.31 s, 0.20 s |
+  | teph | 23.5 s, 19.8 s | 0.31 s, 0.20 s |
+
+- Files: the four model files above; the flag in `rts/Lua/LuaConstEngine.cpp`;
+  `airts/PATCH_LEVEL`.
+- Upstream: worth a pull request to RecoilEngine in three parts (inverse bind matrices; the
+  undefined-behaviour fixes 2 and 3; de-duplication and slot order). Not yet offered. Left as
+  upstream has it: the skinned mesh node's own transform is still applied to its vertices (the
+  spec says to ignore it; the bind pose composes it, so the result matches the spec), and the
+  bone-space loop in both reparent functions also transforms pieces that were already local in
+  files that mix skinned and unskinned meshes.
