@@ -65,10 +65,12 @@ replaces it with our own fixture.
 `.github/workflows/airts-ci.yml` runs on pushes to `airts/**` and `patch/**`, pull requests to
 `airts/main`, and by hand:
 
-- `build`: Ubuntu 24.04, gold linker, `-DAI_TYPES=NONE -DBUILD_spring-legacy=OFF
-  -DPLUTOVG_BUILD_EXAMPLES=OFF -DLUNASVG_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF`, `-O3` without
-  debug info, ccache kept between runs; installs, checks that `--sync-version` ends in
-  `airts-<n>` and names HEAD, and uploads the install tree.
+- `build`: Ubuntu 24.04, gold linker, `-DAI_TYPES=NONE -DPLUTOVG_BUILD_EXAMPLES=OFF
+  -DLUNASVG_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF`, `-O3` without debug info, ccache kept
+  between runs. It builds the whole tree (engine-headless is made from the legacy client's
+  `Game` library target, so `-DBUILD_spring-legacy=OFF` fails to configure, and building only
+  the engine targets leaves `cmake --install` without the mimalloc objects); installs, checks
+  that `--sync-version` ends in `airts-<n>` and names HEAD, and uploads the install tree.
 - `unit-tests`: the same toolchain with `-DBUILD_TESTING=ON`; builds the `tests` target and
   engine-headless (for `testCreg`) and runs `ctest`.
 - `determinism`: runs `airts/fixtures/determinism` twice single-threaded (gating), checks that

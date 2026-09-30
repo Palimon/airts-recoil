@@ -20,14 +20,14 @@ env:
     liblzma-dev zlib1g-dev libexpat1-dev libvorbis-dev libogg-dev libgl1-mesa-dev libx11-dev
     libminizip-dev libcurl4-openssl-dev libjsoncpp-dev libglew-dev
   # The flags that build on Ubuntu 24.04 (spike report, "build"): gold is the engine's C++
-  # linker, and the plutovg and lunasvg example programs fail to link with it.
+  # linker, and the plutovg and lunasvg example programs fail to link with it. The legacy
+  # (GL) client stays in the build: engine-headless is made from its Game library target.
   CMAKE_COMMON: >-
     -G Ninja
     -DCMAKE_BUILD_TYPE=RelWithDebInfo
     -DAI_TYPES=NONE
     -DPLUTOVG_BUILD_EXAMPLES=OFF
     -DLUNASVG_BUILD_EXAMPLES=OFF
-    -DBUILD_spring-legacy=OFF
     -DCMAKE_C_COMPILER_LAUNCHER=ccache
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
   CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -35,7 +35,7 @@ env:
 
 jobs:
   build:
-    name: build engine-headless and engine-dedicated (Linux)
+    name: build engine-headless and engine-dedicated (Linux, full tree)
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -96,7 +96,7 @@ jobs:
           restore-keys: ccache-tests-
       - name: Configure
         run: >-
-          cmake -S . -B build $CMAKE_COMMON -DBUILD_TESTING=ON -DBUILD_spring-dedicated=OFF
+          cmake -S . -B build $CMAKE_COMMON -DBUILD_TESTING=ON
           "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG" "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG"
       - name: Build tests
         run: cmake --build build --target engine-headless tests && ccache -s
