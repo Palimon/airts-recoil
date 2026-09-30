@@ -32,7 +32,8 @@ git rebase --onto fork/airts/main ff8e2a171613321c8dadca995fd74583d25f4c3e patch
 #    rts/Lua/LuaConstEngine.cpp, plus its @field doc line), bumps airts/PATCH_LEVEL by one
 #    and adds the entry at the end of this file.
 # 4. Push: CI (.github/workflows/airts-ci.yml) runs on every push to patch/**
-git push fork patch/<name>
+git push fork patch/<name>        # push a new patch branch on its own: when patch/skinning-gl4 was
+                                  # created in the same push as airts/main, no run started for it
 gh run list -R Palimon/airts-recoil --branch patch/<name>      # from the Windows box
 # 5. Local gate on Tokyo: every engine launch goes through the host-wide slot limiter
 export AIRTS_DET_WRAP=~/recoil-spike/tools/engine-slot.sh
@@ -42,7 +43,7 @@ AIRTS_DET_THREADS=default airts/scripts/determinism.sh <build>/spring-headless /
 git checkout airts/main && git merge --no-ff patch/<name> && git push fork airts/main
 ```
 
-Builds: `RELEASING.md` (docker-build-v2 on Tokyo, both platforms). A native Linux build that
+Builds: `RELEASING.md` (Zeus WSL: docker-build-v2 for Windows, native for Linux). A native Linux build that
 matches CI: `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DAI_TYPES=NONE
 -DPLUTOVG_BUILD_EXAMPLES=OFF -DLUNASVG_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
 -DCMAKE_INSTALL_PREFIX=$PWD/install && cmake --build build && cmake --install build` (needs

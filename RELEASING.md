@@ -6,55 +6,72 @@ they play together; builds of different commits do not.
 
 ## Where builds run
 
-Both platforms build on Tokyo (Ubuntu 24.04, 24 threads) with upstream's container build,
-`docker-build-v2/build.sh`, which pins the build images by digest
-(`docker-build-v2/images_versions.sh`). Zeus is not used for cross-compiles.
-
-Tokyo's working clone is `~/recoil-spike/airts-recoil` (origin is this fork through the deploy
-key `github-airts-recoil` in `~/.ssh/config`; `upstream` is RecoilEngine). Submodules must be
-initialised recursively.
+Release builds run on Zeus in WSL `Ubuntu-24.04` (24 threads, 30 GB), in the clone `~/airts-recoil`
+(origin is this fork over HTTPS, read-only; submodules initialised recursively). The Windows
+build uses upstream's container build (`docker-build-v2/build.sh windows`, images pinned by
+digest in `docker-build-v2/images_versions.sh`); the Linux build is native (gcc 13, gold,
+ccache). One script does both, times them, and checks that both report the same sync version:
 
 ```bash
-cd ~/recoil-spike/airts-recoil
+cd ~/airts-recoil
 git fetch origin && git checkout --detach origin/airts/main
 git submodule update --init --recursive
-docker-build-v2/build.sh windows     # -> build-amd64-windows/install
-docker-build-v2/build.sh linux       # -> build-amd64-linux/install
+airts/scripts/build-release-zeus.sh          # add "cold" to empty both compiler caches first
 ```
 
-The container runs `cmake` with `-DCMAKE_BUILD_TYPE=RELWITHDEBINFO` and `-O3 -g -DNDEBUG`, then
-`cmake --install`; the install tree is the release payload. `ccache` lives in
-`.cache/ccache-amd64-<os>/`, so a rebuild after a small patch takes minutes. The source tree is
-mounted read-only into the container: do not edit or check out files while a build runs.
+Output: `~/airts-builds/airts-main-<10-char hash>/linux/` and `.../windows/` (from Windows:
+`\\wsl$\Ubuntu-24.04\home\palimon\airts-builds\`), `sync-version.txt` next to them, logs in
+`~/airts-builds/logs/`. The source tree is mounted read-only into the Windows container: do not
+edit or check out files while a build runs. The script runs no engine; before running one on
+Zeus, check `tasklist` for other `spring` processes (the tester runs gates on Zeus).
 
-Measured on Tokyo on 2026-09-30 for `dc05e27162`, both cold (empty ccache), `--jobs 12`, run one
-after the other while other agents' engines and builds kept the load average between 60 and 260
-and available memory at times near zero, so treat these as upper bounds:
+The native Linux build links against Ubuntu 24.04's system libraries (SDL2, OpenAL, DevIL,
+GLEW and the rest), so it runs on Ubuntu 24.04 hosts such as Tokyo but is not a portable
+release. A portable Linux archive for players comes from `docker-build-v2/build.sh linux`
+(measured on Tokyo, below).
+
+Copy the Linux tree to Tokyo for tests there (from Git Bash on Zeus):
+
+```bash
+H=<10-char hash>
+wsl -d Ubuntu-24.04 -- tar -C ~/airts-builds/airts-main-$H -cf - linux |
+  ssh palimon@192.168.1.250 "mkdir -p ~/recoil-spike/builds/airts-main-$H && tar -C ~/recoil-spike/builds/airts-main-$H -xf -"
+```
+
+### Build times
+
+Zeus WSL, 2026-09-30, `airts/main` at `1fec2d87d9`, no other build running (measured):
+
+| Build | Cold (empty compiler cache) | Warm (full cache, fresh build dir) |
+|---|---|---|
+| Windows, `docker-build-v2/build.sh windows` (all 24 threads) | 659 s (10 min 59 s) | 25 s |
+| Linux native, full tree plus install | 468 s (7 min 48 s) | 61 s |
+
+Tokyo, 2026-09-30, `dc05e27162`, both cold at `--jobs 12` while other agents' engines kept the
+load average between 60 and 260 (upper bounds, kept for reference):
 
 | Build | Wall time |
 |---|---|
 | Windows (`build.sh --jobs 12 windows`) | 3189 s (53 min 9 s) |
-| Linux (`build.sh --jobs 12 linux`) | 3533 s until the host's process watchdog killed the `spring-headless` link (05:05Z to 05:09Z it matched `g++` lines as engines), then 116 s for the remaining links (`build.sh --compile --jobs 1 linux`): about 61 min in all |
+| Linux, portable (`build.sh --jobs 12 linux`) | 3533 s until the host's process watchdog killed the `spring-headless` link (it matched `g++` lines as engines, 05:05Z to 05:09Z), then 116 s for the remaining links: about 61 min |
 
-A warm rebuild (ccache filled, small patch) is not yet measured. `--jobs 12` leaves room for
-engines on the shared host; an idle Tokyo can use `--jobs 22`.
+The spike's Windows cross-compile on Zeus WSL took 16 min 15 s.
 
-For reference, the spike's Windows cross-compile on Zeus WSL took 16 min 15 s.
+### Builds on record
 
-## Store the build
+| Commit | Where | Sync version |
+|---|---|---|
+| `1fec2d87d9` | Zeus `~/airts-builds/airts-main-1fec2d87d9/{linux,windows}`; Linux copy on Tokyo `~/recoil-spike/builds/airts-main-1fec2d87d9/linux` | `2026.09.01-16-g1fec2d8 airts-2` |
+| `dc05e27162` | Tokyo `~/recoil-spike/builds/airts-main-dc05e27162/{linux,windows}` (docker, portable Linux) | `2026.09.01-13-gdc05e27 airts-2` |
 
-Copy both install trees to `~/recoil-spike/builds/airts-main-<short hash>/linux/` and
-`.../windows/`, and log the sync version:
+`spring-headless --sync-version` prints the version; for `spring.exe` use `spring.exe
+--sync-version` on Windows or `strings -n 12 spring.exe | grep airts-`. `spring-dedicated` prints
+nothing for `--sync-version`; its infolog banner shows the version.
 
-```bash
-H=$(git rev-parse --short=10 HEAD); D=~/recoil-spike/builds/airts-main-$H
-mkdir -p $D && cp -a build-amd64-linux/install $D/linux && cp -a build-amd64-windows/install $D/windows
-$D/linux/spring-headless --sync-version | tee $D/sync-version.txt
-```
-
-The Windows `spring.exe` reports the same string (`spring.exe --sync-version` on Zeus;
-`strings -n 12 spring.exe | grep airts-` checks it on Tokyo). `spring-dedicated` prints nothing
-for `--sync-version`; its infolog banner shows the version.
+The version string abbreviates the hash to 7 characters (`git describe --abbrev=7`), and git
+lengthens an abbreviation that is ambiguous among the objects of that clone. Two clones with
+different object sets could therefore, rarely, print different strings for one commit; compare
+`sync-version.txt` across hosts before a mixed-host test.
 
 ## Before shipping
 
