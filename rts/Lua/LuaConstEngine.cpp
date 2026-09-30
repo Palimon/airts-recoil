@@ -32,6 +32,8 @@
  * @field nanoParticleUpdateCallin boolean Whether LuaUI receives batched `NanoParticleUpdate` lifecycle events
  * @field nanoParticlesGL4 boolean Whether the engine has the standalone shader-based nano particle effect (the `NanoParticles*` springsettings)
  * @field modelVertexColor boolean Whether glTF `COLOR_0` is loaded into the models VBO (`color`, attribute 15; opaque white when absent)
+ * @field airtsFork boolean AIRTS fork build (Palimon/airts-recoil); nil on stock Recoil
+ * @field airtsPatchLevel integer AIRTS fork patch level (airts/PATCH_LEVEL, also the "airts-<n>" part of Engine.version); nil on stock Recoil
  */
 
 /***
@@ -73,7 +75,7 @@ bool LuaConstEngine::PushEntries(lua_State* L)
 	 *
 	 * will be compatible even on engines that don't yet know about the entry at all. */
 	lua_pushliteral(L, "FeatureSupport");
-	lua_createtable(L, 0, 16);
+	lua_createtable(L, 0, 24);
 		LuaPushNamedBool(L, "NegativeGetUnitCurrentCommand", true);
 		LuaPushNamedBool(L, "hasExitOnlyYardmaps", true);
 		LuaPushNamedNumber(L, "rmlUiApiVersion", 1);
@@ -91,6 +93,11 @@ bool LuaConstEngine::PushEntries(lua_State* L)
 		LuaPushNamedBool(L, "nanoParticleUpdateCallin", true);
 		LuaPushNamedBool(L, "nanoParticlesGL4", true);
 		LuaPushNamedBool(L, "modelVertexColor", true);
+
+		// AIRTS fork patches (PATCHES.md): one flag per patch, so game Lua can detect a patched
+		// engine and fall back to the gadget form on stock Recoil, where these keys are nil.
+		LuaPushNamedBool(L, "airtsFork", true);
+		LuaPushNamedNumber(L, "airtsPatchLevel", SpringVersion::GetAirtsPatchLevel());
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "textColorCodes");
