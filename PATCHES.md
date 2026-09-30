@@ -322,7 +322,7 @@ Windows. Branch CI: run 36676111515 green (build, 27 of 27 gating unit tests, de
 3. The patch author's own gate on the branch build `2026.09.01-19-g4953050 airts-3` gave the same frames.
 4. Watched check on Zeus: the tester's GPU gate with this build (pending).
 
-### 004 unit-tempo (`patch/unit-tempo`, 2026-09-30)
+### 003 unit-tempo (`patch/unit-tempo`, merged 2026-09-30)
 
 - Flag: `Engine.FeatureSupport.airtsUnitTempo`. Patch level 4.
 - API: `Spring.SetUnitTempo(unitID, tempo)` (synced), `Spring.GetUnitTempo(unitID)`. Tempo is the rate
@@ -360,9 +360,13 @@ Windows. Branch CI: run 36676111515 green (build, 27 of 27 gating unit tests, de
   `airts/scripts/feature-tests.sh`.
 - Why Lua cannot do it: Lua cannot reach reload in progress, animation time, stun decay or the
   other engine timers, and cannot write `maxSpeed` while a unit is under MoveCtrl.
+- Known limits: strafe-air (plane) speed is not scaled between tempo 0 and 1; script sleeps and
+  waits are not scaled (COB threads and Lua unit-script coroutines); missiles and starburst
+  weapons accelerate back towards their def speed after launch; reclaim, resurrect, capture and
+  terraform power are not scaled.
 - Upstream: offer as a pull request (plan decision 11). Not yet offered.
 
-### 005 unit-speedmult (`patch/unit-tempo`, speed-multiplier series, 2026-09-30)
+### 004 unit-speedmult (`patch/unit-tempo`, speed-multiplier series, merged 2026-09-30)
 
 - Flag: `Engine.FeatureSupport.airtsUnitSpeedMult`. Patch level 5.
 - API: `Spring.SetUnitSpeedMult(unitID, mult)` (synced), `Spring.GetUnitSpeedMult(unitID)`. It
@@ -375,9 +379,9 @@ Windows. Branch CI: run 36676111515 green (build, 27 of 27 gating unit tests, de
   and can still turn in place.
 - Files: `rts/Sim/Units/Unit.h`, `Unit.cpp` (`CR_MEMBER` `speedMult`), `rts/Lua/LuaSyncedCtrl.*`,
   `LuaSyncedRead.*`, `LuaConstEngine.cpp`.
-- Upstream: offer together with 004. Not yet offered.
+- Upstream: offer together with 003. Not yet offered.
 
-#### Gate result for 004 and 005 (2026-09-30)
+#### Gate result for 003 and 004 (2026-09-30)
 
 Build: Zeus WSL native `engine-headless` of this branch (`2026.09.01-25-g4b44785 airts-5`, the same
 source as the branch head apart from commit metadata), run on Tokyo from
@@ -394,6 +398,6 @@ source as the branch head apart from commit metadata), run on Tokyo from
    stock (last hash 56095): at tempo 1 and multiplier 1 the patched code computes the same values.
 3. Cogwright match, default threads: GameOver 32465 on both runs, 65 markers, 68/34/17/17 burn
    lines, 20 AI waves, zero error and sync lines; every count equals stock.
-4. Not yet run: the cross-platform run with the Windows client sending orders (V4 topology) and
-   a watched check on Zeus of a tempo field and a frozen unit.
+4. Rides on the tester's next gate: the cross-platform run with the Windows client sending
+   orders (V4 topology) and a watched check on Zeus of a tempo field and a frozen unit.
 
