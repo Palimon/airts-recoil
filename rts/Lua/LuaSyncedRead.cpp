@@ -217,6 +217,8 @@ bool LuaSyncedRead::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(GetUnitHealth);
 	REGISTER_LUA_CFUNC(GetUnitIsDead);
 	REGISTER_LUA_CFUNC(GetUnitIsStunned);
+	REGISTER_LUA_CFUNC(GetUnitTempo);
+	REGISTER_LUA_CFUNC(GetUnitSpeedMult);
 	REGISTER_LUA_CFUNC(GetUnitIsBeingBuilt);
 	REGISTER_LUA_CFUNC(GetUnitResources);
 	REGISTER_LUA_CFUNC(GetUnitStorage);
@@ -4233,6 +4235,40 @@ int LuaSyncedRead::GetUnitIsStunned(lua_State* L)
 	lua_pushboolean(L, unit->IsStunned());
 	lua_pushboolean(L, unit->beingBuilt);
 	return 3;
+}
+
+/***
+ * AIRTS unit-tempo patch: the unit's tempo (1 normal, 0 frozen); nil when the unit is not in LOS.
+ *
+ * @function Spring.GetUnitTempo
+ * @param unitID UnitID
+ * @return number? tempo
+ */
+int LuaSyncedRead::GetUnitTempo(lua_State* L)
+{
+	const CUnit* unit = ParseInLosUnit(L, __func__, 1);
+	if (unit == nullptr)
+		return 0;
+
+	lua_pushnumber(L, unit->GetTempo());
+	return 1;
+}
+
+/***
+ * AIRTS unit-speedmult patch: the unit's speed multiplier; nil when the unit is not in LOS.
+ *
+ * @function Spring.GetUnitSpeedMult
+ * @param unitID UnitID
+ * @return number? mult
+ */
+int LuaSyncedRead::GetUnitSpeedMult(lua_State* L)
+{
+	const CUnit* unit = ParseInLosUnit(L, __func__, 1);
+	if (unit == nullptr)
+		return 0;
+
+	lua_pushnumber(L, unit->GetSpeedMult());
+	return 1;
 }
 
 

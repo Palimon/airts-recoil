@@ -47,7 +47,9 @@ void GroundMoveSystem::Update() {
 			unit->SanityCheck();
             #endif
 
-			moveType->UpdateTraversalPlan();
+			// AIRTS unit-tempo: a frozen unit does not follow its path
+			if (!unit->IsTimeFrozen())
+				moveType->UpdateTraversalPlan();
 		});
 	}
 	{

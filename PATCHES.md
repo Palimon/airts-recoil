@@ -80,6 +80,8 @@ fallback> end`.
 | `airtsPatchLevel` | integer, `airts/PATCH_LEVEL` | fork plumbing |
 | `airtsSkinningFix` | boolean | `patch/skinning-gl4` |
 | `airtsGltfLoader` | boolean | `patch/gltf-loader` |
+| `airtsUnitTempo` | boolean | `patch/unit-tempo` (tempo series) |
+| `airtsUnitSpeedMult` | boolean | `patch/unit-tempo` (speed-multiplier series) |
 
 ## The gate every patch passes before it merges
 
@@ -319,3 +321,79 @@ Windows. Branch CI: run 36676111515 green (build, 27 of 27 gating unit tests, de
    equals stock. Peak RSS 4.10 GB.
 3. The patch author's own gate on the branch build `2026.09.01-19-g4953050 airts-3` gave the same frames.
 4. Watched check on Zeus: the tester's GPU gate with this build (pending).
+
+### 004 unit-tempo (`patch/unit-tempo`, 2026-09-30)
+
+- Flag: `Engine.FeatureSupport.airtsUnitTempo`. Patch level 4.
+- API: `Spring.SetUnitTempo(unitID, tempo)` (synced), `Spring.GetUnitTempo(unitID)`. Tempo is the rate
+  of the unit's local time: 1 normal, 0 frozen, no upper bound; a negative or non-finite value is
+  a Lua error.
+- What it scales, and how:
+  1. Movement: the ground movetype's final speed target (after turn, terrain, braking and wanted
+     speed limits), its acceleration, deceleration and turn rate; the hover-air speed target;
+     MoveCtrl motion (velocity, gravity, wind, relative velocity, drag and rotation). `maxSpeed`
+     itself is never written, so nothing divides by a scaled 0.
+  2. Weapons: a reload or salvo delay in progress is consumed at the tempo (its ready frame moves
+     by the frames the unit's time did not advance, through `CUnit::UpdateTempoTimers`); a loaded
+     weapon stays loaded.
+  3. Shots: speed times the tempo and lifetime divided by it at creation, so range is kept.
+     Missiles and starburst weapons still accelerate towards their def speed; a ballistic shot at
+     a lower speed falls shorter than its aim.
+  4. Build and repair power of builders and factories. Reclaim, resurrect, capture and
+     terraform are not scaled.
+  5. Script animations (Turn, Move, Spin, scale) of COB and Lua unit scripts. Script sleeps and
+     waits are not scaled (COB threads, and Lua unit-script coroutines run by the game's gadget).
+  6. Autoheal, idle autoheal, stun (paralysis) decay and the self-destruct countdown.
+  7. The engine has no cloak timer (cloak state is checked each slow update), so there is none
+     to scale.
+- Tempo 0: the ground movetype and its path following do not run and the unit's velocity is 0;
+  air, MoveCtrl and static movetypes do not run; the unit does not aim or fire
+  (`CUnit::CanUpdateWeapons`); its animations stop; build power, heal and stun decay are 0.
+  Strafe-air (plane) speed is not scaled at tempos between 0 and 1.
+- Files: `rts/Sim/Units/Unit.h`, `Unit.cpp` (new `CR_MEMBER` state `tempo`, `tempoFrameLag`,
+  `selfDTempoAccum`), `rts/Sim/Units/Scripts/UnitScript.h`, `UnitScript.cpp`,
+  `rts/Sim/MoveTypes/GroundMoveType.cpp`, `HoverAirMoveType.cpp`, `ScriptMoveType.cpp`,
+  `Systems/GroundMoveSystem.cpp`, `Systems/GeneralMoveSystem.cpp`, `rts/Sim/Weapons/Weapon.cpp`,
+  `rts/Sim/Projectiles/ProjectileParams.h`, `WeaponProjectiles/WeaponProjectileFactory.cpp`,
+  `rts/Sim/Units/UnitTypes/Builder.cpp`, `Factory.cpp`, `rts/Lua/LuaSyncedCtrl.*`,
+  `LuaSyncedRead.*`, `LuaConstEngine.cpp`; tests in `airts/fixtures/` and
+  `airts/scripts/feature-tests.sh`.
+- Why Lua cannot do it: Lua cannot reach reload in progress, animation time, stun decay or the
+  other engine timers, and cannot write `maxSpeed` while a unit is under MoveCtrl.
+- Upstream: offer as a pull request (plan decision 11). Not yet offered.
+
+### 005 unit-speedmult (`patch/unit-tempo`, speed-multiplier series, 2026-09-30)
+
+- Flag: `Engine.FeatureSupport.airtsUnitSpeedMult`. Patch level 5.
+- API: `Spring.SetUnitSpeedMult(unitID, mult)` (synced), `Spring.GetUnitSpeedMult(unitID)`. It
+  multiplies movement speed only (not acceleration, turn rate, weapons or timers) and composes
+  with tempo (`CUnit::GetMoveSpeedMult`). 1 normal, no upper bound; negative or non-finite is a
+  Lua error.
+- It applies to the ground speed target, the hover-air speed target and MoveCtrl motion, also
+  while the unit is under MoveCtrl (which `MoveCtrl.Set*MoveTypeData` cannot do). 0 holds the
+  unit with no 0.001 floor: a MoveCtrl unit does not move at all; a ground unit decelerates to 0
+  and can still turn in place.
+- Files: `rts/Sim/Units/Unit.h`, `Unit.cpp` (`CR_MEMBER` `speedMult`), `rts/Lua/LuaSyncedCtrl.*`,
+  `LuaSyncedRead.*`, `LuaConstEngine.cpp`.
+- Upstream: offer together with 004. Not yet offered.
+
+#### Gate result for 004 and 005 (2026-09-30)
+
+Build: Zeus WSL native `engine-headless` of this branch (`2026.09.01-25-g4b44785 airts-5`, the same
+source as the branch head apart from commit metadata), run on Tokyo from
+`~/recoil-spike/builds/tempo-dev/linux` through `engine-slot.sh`.
+
+1. Feature tests (`airts/scripts/feature-tests.sh`, single-threaded), 6 of 6 PASS, identical on
+   two runs: tempo 0 turret spin frozen (0 rad against 2.094 rad at tempo 1 in 120 frames); ground
+   move at tempo 0.5 covered 77.19 elmos against 161.59 (ratio 0.478), tempo 0 covered 0;
+   MoveCtrl at tempo 0.5 60.00 against 120.00; a reload in progress at tempo 0.5 ended 60 frames
+   later after 120 frames; MoveCtrl at speed multiplier 0 moved 0 and at 3 moved 360.00 against
+   120.00; a ground order at multiplier 0 moved 0 and at 3 moved 445.60 against 161.59. The base
+   build (`767814c`) prints SKIP for all six.
+2. Fixture determinism, single-threaded: GameOver 2108 on both runs, census identical and equal to
+   stock (last hash 56095): at tempo 1 and multiplier 1 the patched code computes the same values.
+3. Cogwright match, default threads: GameOver 32465 on both runs, 65 markers, 68/34/17/17 burn
+   lines, 20 AI waves, zero error and sync lines; every count equals stock.
+4. Not yet run: the cross-platform run with the Windows client sending orders (V4 topology) and
+   a watched check on Zeus of a tempo field and a frozen unit.
+

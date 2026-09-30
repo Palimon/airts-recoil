@@ -58,6 +58,11 @@ local function census(n)
 end
 
 function gadget:Initialize()
+  -- the feature tests (airts_feature_tests.lua) run their own units; no squads then
+  if (modOpts.airts_test or "") ~= "" then
+    gadgetHandler:RemoveGadget()
+    return
+  end
   -- every fork feature flag as game Lua sees it (all nil on stock Recoil), sorted by key
   local fs, keys, parts = Engine.FeatureSupport or {}, {}, {}
   for k in pairs(fs) do

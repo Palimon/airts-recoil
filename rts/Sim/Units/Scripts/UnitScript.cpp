@@ -174,7 +174,7 @@ bool CUnitScript::ScaleToward(float& cur, float dest, float speed)
  * @param divisor int is the deltatime, it is not added before the call because speed may have to be updated
  * @return true if the desired speed is 0 and it is reached, false otherwise
  */
-bool CUnitScript::DoSpin(float& cur, float dest, float& speed, float accel, int divisor)
+bool CUnitScript::DoSpin(float& cur, float dest, float& speed, float accel, float divisor)
 {
 	const float delta = dest - speed;
 
@@ -208,12 +208,20 @@ void CUnitScript::TickAllAnims(int deltaTime)
 	// tick-functions; these never change address
 	static constexpr std::array<TickAnimFunc, ACount> TICK_ANIM_FUNCS = { &CUnitScript::TickTurnAnim, &CUnitScript::TickSpinAnim, &CUnitScript::TickMoveAnim, &CUnitScript::TickScaleAnim };
 
-	const int tickRate = 1000 / deltaTime;
+	// AIRTS unit-tempo: the unit's animations advance by deltaTime * tempo; at tempo 0 they
+	// stay where they are (the dirty-piece pass below still runs)
+	const float unitTempo = (unit != nullptr)? unit->GetTempo(): 1.0f;
+	const float tickRate = (1000 / deltaTime) / unitTempo;
 
 	// clear doneAnims here to preserve them for DumpState
 	doneAnims.clear();
 
 	for (auto& ai : anims) {
+		if (unitTempo == 0.0f) {
+			checksum = spring::LiteHash(ai, checksum);
+			continue;
+		}
+
 		LocalModelPiece& lmp = *pieces[ai.piece];
 		const auto& currFunc = TICK_ANIM_FUNCS[ai.animType];
 		if ((ai.done |= std::invoke(currFunc, this, tickRate, lmp, ai))) {
@@ -298,7 +306,7 @@ bool CUnitScript::TickAnimFinished()
 	return HaveAnimations();
 }
 
-bool CUnitScript::TickMoveAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
+bool CUnitScript::TickMoveAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 {
 	float3 pos = lmp.GetPosition();
 	const bool ret = MoveToward(pos[ai.axis], ai.dest, ai.speed / tickRate);
@@ -308,7 +316,7 @@ bool CUnitScript::TickMoveAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 	return ret;
 }
 
-bool CUnitScript::TickTurnAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
+bool CUnitScript::TickTurnAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 {
 	float3 rot = lmp.GetRotation();
 	rot[ai.axis] = ClampRad(rot[ai.axis]);
@@ -319,7 +327,7 @@ bool CUnitScript::TickTurnAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 	return ret;
 }
 
-bool CUnitScript::TickSpinAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
+bool CUnitScript::TickSpinAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 {
 	float3 rot = lmp.GetRotation();
 	rot[ai.axis] = ClampRad(rot[ai.axis]);
@@ -330,7 +338,7 @@ bool CUnitScript::TickSpinAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 	return ret;
 }
 
-bool CUnitScript::TickScaleAnim(int tickRate, LocalModelPiece& lmp, AnimInfo& ai)
+bool CUnitScript::TickScaleAnim(float tickRate, LocalModelPiece& lmp, AnimInfo& ai)
 {
 	auto scale = lmp.GetScaling();
 	const bool ret = ScaleToward(scale, ai.dest, ai.speed / tickRate);

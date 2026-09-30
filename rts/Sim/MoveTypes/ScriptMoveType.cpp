@@ -98,8 +98,12 @@ void CScriptMoveType::CheckNotify()
 bool CScriptMoveType::Update()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	// AIRTS unit-tempo and speed multiplier: MoveCtrl motion (velocity, gravity, wind,
+	// relative velocity and rotation) advances at the unit's move multiplier
+	const float moveMult = owner->GetMoveSpeedMult();
+
 	if (useRotVel)
-		owner->SetDirVectorsEuler(rot += rotVel);
+		owner->SetDirVectorsEuler(rot += (rotVel * moveMult));
 
 	if (extrapolate) {
 		// NOTE: only gravitational acc. is allowed to build up velocity
@@ -112,15 +116,15 @@ bool CScriptMoveType::Update()
 			(owner->rightdir * -relVel.x):
 			ZeroVector;
 
-		owner->Move(gravVec + velVec, true);
-		owner->Move(windVec,          true);
-		owner->Move(unitVec,          true);
+		owner->Move((gravVec + velVec) * moveMult, true);
+		owner->Move(windVec * moveMult,            true);
+		owner->Move(unitVec * moveMult,            true);
 
 		// quadratic drag does not work well here
-		velVec += gravVec;
-		velVec *= (1.0f - drag);
+		velVec += (gravVec * moveMult);
+		velVec *= (1.0f - drag * moveMult);
 
-		owner->SetVelocityAndSpeed(velVec);
+		owner->SetVelocityAndSpeed(velVec * moveMult);
 	}
 
 	if (trackGround) {

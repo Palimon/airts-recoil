@@ -682,6 +682,8 @@ void CUnit::Update()
 	recentDamage *= 0.9f;
 	flankingBonusMobility += flankingBonusMobilityAdd;
 
+	UpdateTempoTimers();
+
 	if (IsStunned()) {
 		// paralyzed weapons shouldn't reload
 		for (CWeapon* w: weapons) {
@@ -692,6 +694,31 @@ void CUnit::Update()
 	}
 
 	restTime += 1;
+}
+
+void CUnit::UpdateTempoTimers()
+{
+	// AIRTS unit-tempo: a weapon that is still reloading (or between salvo shots) has its
+	// ready frame pushed back by the real frames the unit's local time did not advance, or
+	// pulled forward when tempo is above 1. A weapon that is already loaded stays loaded.
+	if (tempo == 1.0f)
+		return;
+
+	tempoFrameLag += (1.0f - tempo);
+
+	const int shift = static_cast<int>(tempoFrameLag); // truncates towards zero for both signs
+
+	if (shift == 0)
+		return;
+
+	tempoFrameLag -= shift;
+
+	for (CWeapon* w: weapons) {
+		if (w->reloadStatus > gs->frameNum)
+			w->reloadStatus += shift;
+		if (w->salvoLeft > 0 && w->nextSalvo > gs->frameNum)
+			w->nextSalvo += shift;
+	}
 }
 
 void CUnit::UpdateWeaponVectors()
@@ -999,7 +1026,7 @@ void CUnit::SlowUpdate()
 		// DoDamage) we potentially start decaying from a lower damage
 		// level and would otherwise be de-paralyzed more quickly than
 		// specified by <paralyzeTime>
-		paralyzeDamage -= ((modInfo.paralyzeOnMaxHealth? maxHealth: health) * (UNIT_SLOWUPDATE_RATE * INV_GAME_SPEED) * globalUnitParams.empDeclineRate);
+		paralyzeDamage -= ((modInfo.paralyzeOnMaxHealth? maxHealth: health) * (UNIT_SLOWUPDATE_RATE * INV_GAME_SPEED) * globalUnitParams.empDeclineRate) * tempo;
 		paralyzeDamage = std::max(paralyzeDamage, 0.0f);
 	}
 
@@ -1022,14 +1049,22 @@ void CUnit::SlowUpdate()
 	}
 
 	if (selfDCountdown > 0) {
-		if ((selfDCountdown -= 1) == 0) {
-			// avoid unfinished buildings making an explosion
-			KillUnit(nullptr, !beingBuilt, beingBuilt, -CSolidObject::DAMAGE_SELFD_EXPIRED);
-			return;
-		}
+		// AIRTS unit-tempo: one countdown step per 1.0 of local time (exactly one at tempo 1)
+		selfDTempoAccum += tempo;
 
-		if ((selfDCountdown & 1) && (team == gu->myTeam) && !gu->spectating)
-			LOG("%s: self-destruct in %is", unitDef->humanName.c_str(), (selfDCountdown >> 1) + 1);
+		const int selfDSteps = static_cast<int>(selfDTempoAccum);
+		selfDTempoAccum -= selfDSteps;
+
+		for (int i = 0; i < selfDSteps && selfDCountdown > 0; i++) {
+			if ((selfDCountdown -= 1) == 0) {
+				// avoid unfinished buildings making an explosion
+				KillUnit(nullptr, !beingBuilt, beingBuilt, -CSolidObject::DAMAGE_SELFD_EXPIRED);
+				return;
+			}
+
+			if ((selfDCountdown & 1) && (team == gu->myTeam) && !gu->spectating)
+				LOG("%s: self-destruct in %is", unitDef->humanName.c_str(), (selfDCountdown >> 1) + 1);
+		}
 	}
 
 	if (beingBuilt) {
@@ -1099,8 +1134,9 @@ void CUnit::SlowUpdate()
 
 
 	if (health < maxHealth) {
-		health += (unitDef->idleAutoHeal * (restTime > unitDef->idleTime));
-		health += unitDef->autoHeal;
+		// AIRTS unit-tempo: autoheal runs at <tempo>
+		health += (unitDef->idleAutoHeal * (restTime > unitDef->idleTime)) * tempo;
+		health += unitDef->autoHeal * tempo;
 		health = std::min(health, maxHealth);
 	}
 
@@ -2887,6 +2923,10 @@ CR_REG_METADATA(CUnit, (
 	CR_MEMBER(restTime),
 
 	CR_MEMBER(reloadSpeed),
+	CR_MEMBER(tempo),
+	CR_MEMBER(speedMult),
+	CR_MEMBER(tempoFrameLag),
+	CR_MEMBER(selfDTempoAccum),
 	CR_MEMBER(maxRange),
 	CR_MEMBER(lastMuzzleFlameSize),
 

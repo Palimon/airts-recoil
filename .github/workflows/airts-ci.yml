@@ -136,6 +136,8 @@ jobs:
           grep -h -o 'AIRTS_FEATURES .*' det-1thread/run-a/stdout.log | tee features.txt
           grep -q 'airtsFork=true' features.txt
           grep -q "airtsPatchLevel=$(cat airts/PATCH_LEVEL) " features.txt
+      - name: Feature tests (every patch's Lua-visible behaviour)
+        run: AIRTS_TEST_REQUIRE_ALL=1 airts/scripts/feature-tests.sh install/spring-headless feature-tests
       - name: Multi-threaded determinism (known upstream issue, not gating)
         continue-on-error: true
         run: AIRTS_DET_THREADS=default airts/scripts/determinism.sh install/spring-headless det-mt
@@ -144,6 +146,7 @@ jobs:
         with:
           name: determinism-logs
           path: |
+            feature-tests/stdout.log
             det-*/run-*/stdout.log
             det-*/run-*/census.txt
             det-*/census.diff

@@ -15,8 +15,18 @@
 #include "Sim/Misc/GlobalConstants.h"
 #include "Sim/Projectiles/ProjectileMemPool.h"
 #include "Sim/Weapons/WeaponDef.h"
+#include "System/SpringMath.h"
 
-unsigned int WeaponProjectileFactory::LoadProjectile(const ProjectileParams& params) {
+unsigned int WeaponProjectileFactory::LoadProjectile(const ProjectileParams& inParams) {
+	// AIRTS unit-tempo: a shot from a unit at tempo t starts at t times its speed and lives
+	// 1/t as many frames, so it covers the same distance (a unit at tempo 0 does not fire)
+	ProjectileParams params = inParams;
+	if (params.tempoSpeedScale != 1.0f && params.tempoSpeedScale > 0.0f) {
+		params.speed *= params.tempoSpeedScale;
+		if (params.ttl > 0)
+			params.ttl = static_cast<int>(math::ceil(params.ttl / params.tempoSpeedScale));
+	}
+
 	const WeaponDef* weaponDef = params.weaponDef;
 	const CWeaponProjectile* projectile = nullptr;
 

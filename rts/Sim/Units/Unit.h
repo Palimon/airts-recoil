@@ -160,11 +160,23 @@ public:
 
 	bool HaveTarget() const { return (curTarget.type != Target_None); }
 	bool CanUpdateWeapons() const {
-		return (forceUseWeapons || (allowUseWeapons && !onTempHoldFire && !isDead && !beingBuilt && !IsStunned()));
+		// AIRTS unit-tempo: a unit at tempo 0 is frozen in time and does not aim or fire
+		return (!IsTimeFrozen() && (forceUseWeapons || (allowUseWeapons && !onTempHoldFire && !isDead && !beingBuilt && !IsStunned())));
 	}
+
+	// AIRTS unit-tempo (PATCHES.md): the unit's local time runs at <tempo> times real time
+	bool IsTimeFrozen() const { return (tempo == 0.0f); }
+	float GetTempo() const { return tempo; }
+	void SetTempo(float t) { tempo = t; }
+	// AIRTS unit-speedmult: speed-only multiplier (no acceleration, turn or timer effect)
+	float GetSpeedMult() const { return speedMult; }
+	void SetSpeedMult(float m) { speedMult = m; }
+	// multiplier on the unit's movement speed: tempo times the speed multiplier
+	float GetMoveSpeedMult() const { return tempo * speedMult; }
 
 	void SetNeutral(bool b);
 	void SetStunned(bool stun);
+	void UpdateTempoTimers();
 
 	bool GetPosErrorBit(int at) const {
 		return (posErrorMask[at / 32] & (1 << (at % 32)));
@@ -378,6 +390,17 @@ public:
 	unsigned int restTime = 0;
 
 	float reloadSpeed = 1.0f;
+
+	// AIRTS unit-tempo: rate of the unit's local time (1 normal, 0 frozen; no upper bound)
+	float tempo = 1.0f;
+	// AIRTS unit-speedmult: multiplier on movement speed only (1 normal, 0 holds the unit;
+	// no upper bound); applies to ground, hover-air and MoveCtrl motion
+	float speedMult = 1.0f;
+	// frames of real time not yet applied to the unit's frame-stamped timers (weapon reload
+	// and salvo); whole frames are applied each Update
+	float tempoFrameLag = 0.0f;
+	// fraction of a self-destruct countdown step accumulated at <tempo> per slow update
+	float selfDTempoAccum = 0.0f;
 	float maxRange = 0.0f;
 
 	// used to determine muzzle flare size
