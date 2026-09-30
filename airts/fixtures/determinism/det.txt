@@ -1,0 +1,68 @@
+[GAME]
+{
+	Gametype=AIRTS Determinism Fixture 1;
+	MapName=AIRTS Arena;
+	IsHost=1;
+	OnlyLocal=1;
+	MyPlayerName=host;
+	StartPosType=3;
+	FixedRNGSeed=123123;
+	RecordDemo=0;
+	NumPlayers=1;
+	NumTeams=2;
+	NumAllyTeams=2;
+	[MODOPTIONS]
+	{
+		MinSpeed=100;
+		MaxSpeed=100;
+		airts_quit_minframe=0;
+		airts_det_squad=12;
+		airts_det_timeout=18000;
+	}
+	[PLAYER0]
+	{
+		Name=host;
+		Spectator=1;
+		Team=0;
+	}
+	[AI0]
+	{
+		Name=ai_red;
+		ShortName=AirtsAI;
+		Team=0;
+		Host=0;
+	}
+	[AI1]
+	{
+		Name=ai_blue;
+		ShortName=AirtsAI;
+		Team=1;
+		Host=0;
+	}
+	[TEAM0]
+	{
+		TeamLeader=0;
+		AllyTeam=0;
+		Side=AIRTS;
+		RgbColor=0.9 0.2 0.2;
+		StartPosX=600;
+		StartPosZ=600;
+	}
+	[TEAM1]
+	{
+		TeamLeader=0;
+		AllyTeam=1;
+		Side=AIRTS;
+		RgbColor=0.2 0.4 0.9;
+		StartPosX=3500;
+		StartPosZ=3500;
+	}
+	[ALLYTEAM0]
+	{
+		NumAllies=0;
+	}
+	[ALLYTEAM1]
+	{
+		NumAllies=0;
+	}
+}
