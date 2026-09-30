@@ -83,6 +83,8 @@ fallback> end`.
 | `airtsUnitTempo` | boolean | `patch/unit-tempo` (tempo series) |
 | `airtsUnitSpeedMult` | boolean | `patch/unit-tempo` (speed-multiplier series) |
 
+`patch/creg-mtdrawsafe` adds no key: it changes nothing Lua can observe.
+
 ## The gate every patch passes before it merges
 
 1. CI on the patch branch (`.github/workflows/airts-ci.yml`): the Linux build of
@@ -168,12 +170,10 @@ frames, and `game_end` declares the winner. It uses no BAR content.
   trace. Tokyo's shells have `ulimit -c 0` already.
 
 - **testCreg fails at the base commit.** Upstream a53282a (2026-09-07, "Particle draw
-  optimizations") added `bool mtDrawSafe` to `CProjectile` (`rts/Sim/Projectiles/Projectile.h:121`)
-  without a creg entry in `Projectile.cpp`, so `spring-headless --test-creg` reports 37 of 216
-  classes with a missing byte between `drawSorted` and `blockPreciseCol`. Save games of
-  projectiles may lose the field; nothing else is affected. CI runs testCreg without gating on
-  it. The fix is one `CR_MEMBER(mtDrawSafe)` (or `CR_IGNORED`) line, worth an upstream pull
-  request; not patched here.
+  optimizations") added `bool mtDrawSafe` to `CProjectile` without a creg entry, so
+  `spring-headless --test-creg` reports 37 of 216 classes with a missing byte between
+  `drawSorted` and `blockPreciseCol`. Fixed in this fork by `patch/creg-mtdrawsafe` (entry 005),
+  after which CI gates on testCreg again.
 
 ## Patches
 
@@ -401,3 +401,19 @@ source as the branch head apart from commit metadata), run on Tokyo from
 4. Rides on the tester's next gate: the cross-platform run with the Windows client sending
    orders (V4 topology) and a watched check on Zeus of a tempo field and a frozen unit.
 
+### 005 creg-mtdrawsafe (`patch/creg-mtdrawsafe`, merged 2026-09-30)
+
+- Flag: none (no Lua-visible behaviour). Patch level 6.
+- Symptom: testCreg (`spring-headless --test-creg`) fails at the base commit: 37 of 216
+  projectile classes report a missing byte between `drawSorted` and `blockPreciseCol`.
+- Cause: upstream a53282a (2026-09-07, "Particle draw optimizations", #3232) added
+  `bool mtDrawSafe` to `CProjectile` (`rts/Sim/Projectiles/Projectile.h:122`) without a creg
+  entry. Save games do not store it; `ShieldSegmentProjectile` and `TracerProjectile` set it per
+  instance.
+- Fix: `CR_MEMBER(mtDrawSafe)` in `rts/Sim/Projectiles/Projectile.cpp`, next to `drawSorted`.
+  CI's unit-test job gates on testCreg again.
+- Files: `rts/Sim/Projectiles/Projectile.cpp`; `airts/PATCH_LEVEL`;
+  `.github/workflows/airts-ci.yml`; `airts/upstream/creg-mtdrawsafe.md`.
+- Proof: the CI run of this branch (testCreg passes, determinism unchanged).
+- Upstream: pull request text ready in `airts/upstream/creg-mtdrawsafe.md` (first commit of this
+  branch only). Not opened; Jonathan decides.
