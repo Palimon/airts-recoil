@@ -30,15 +30,19 @@ for r in a b; do
   rm -rf "$W"; mkdir -p "$W"
   if [ "$THREADS" != default ]; then echo "WorkerThreadCount = $THREADS" > "$W/springsettings.cfg"; fi
   T0=$(date +%s.%N)
-  SPRING_DATADIR="$DATA" timeout "$TIMEOUT_S" "$BIN" --isolation --write-dir "$W" "$SCRIPT" > "$W/stdout.log" 2>&1
+  # /usr/bin/time records the engine's peak RSS; AIRTS_DET_WRAP prefixes each launch (on Tokyo:
+  # ~/recoil-spike/tools/engine-slot.sh, the host-wide engine slot limiter)
+  TIMECMD=(); [ -x /usr/bin/time ] && TIMECMD=(/usr/bin/time -f "maxrss_kb=%M" -o "$W/time.txt")
+  SPRING_DATADIR="$DATA" ${AIRTS_DET_WRAP:-} "${TIMECMD[@]}" timeout "$TIMEOUT_S" "$BIN" --isolation --write-dir "$W" "$SCRIPT" > "$W/stdout.log" 2>&1
   RC=$?
   T1=$(date +%s.%N)
   LOG="$W/stdout.log"
   grep -o 'AIRTS_CENSUS .*' "$LOG" > "$W/census.txt"
   GO=$(grep -o 'AIRTS_GAMEOVER .*' "$LOG" | head -1)
   NERR=$(grep -cE "$ERR" "$LOG"); NSYNC=$(grep -cE "$SYNC" "$LOG")
-  printf 'run-%s rc=%s wall=%.1fs gameover="%s" census_lines=%s errors=%s sync=%s timeout_lines=%s\n' \
-    "$r" "$RC" "$(echo "$T1 - $T0" | bc)" "$GO" "$(wc -l < "$W/census.txt")" "$NERR" "$NSYNC" "$(grep -c AIRTS_TIMEOUT "$LOG")"
+  printf 'run-%s rc=%s wall=%.1fs gameover="%s" census_lines=%s errors=%s sync=%s timeout_lines=%s %s\n' \
+    "$r" "$RC" "$(echo "$T1 - $T0" | bc)" "$GO" "$(wc -l < "$W/census.txt")" "$NERR" "$NSYNC" "$(grep -c AIRTS_TIMEOUT "$LOG")" \
+    "$(grep -o 'maxrss_kb=[0-9]*' "$W/time.txt" 2>/dev/null)"
   [ "$RC" = 0 ] || fail "run-$r exit code $RC"
   [ -n "$GO" ] || fail "run-$r has no AIRTS_GAMEOVER line"
   [ "$NERR" = 0 ] || { fail "run-$r has $NERR error lines"; grep -E "$ERR" "$LOG" | head -5; }
