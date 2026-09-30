@@ -34,6 +34,7 @@
  * @field modelVertexColor boolean Whether glTF `COLOR_0` is loaded into the models VBO (`color`, attribute 15; opaque white when absent)
  * @field airtsFork boolean AIRTS fork build (Palimon/airts-recoil); nil on stock Recoil
  * @field airtsPatchLevel integer AIRTS fork patch level (airts/PATCH_LEVEL, also the "airts-<n>" part of Engine.version); nil on stock Recoil
+ * @field airtsSkinningFix boolean AIRTS patch skinning-gl4: the GL4 model and shadow vertex programs read all four bone influences and renormalise the weights
  */
 
 /***
@@ -98,6 +99,7 @@ bool LuaConstEngine::PushEntries(lua_State* L)
 		// engine and fall back to the gadget form on stock Recoil, where these keys are nil.
 		LuaPushNamedBool(L, "airtsFork", true);
 		LuaPushNamedNumber(L, "airtsPatchLevel", SpringVersion::GetAirtsPatchLevel());
+		LuaPushNamedBool(L, "airtsSkinningFix", true); // patch/skinning-gl4
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "textColorCodes");
