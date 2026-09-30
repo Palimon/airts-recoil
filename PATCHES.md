@@ -417,3 +417,13 @@ source as the branch head apart from commit metadata), run on Tokyo from
 - Proof: the CI run of this branch (testCreg passes, determinism unchanged).
 - Upstream: pull request text ready in `airts/upstream/creg-mtdrawsafe.md` (first commit of this
   branch only). Not opened; Jonathan decides.
+
+#### Gate result on the merge of 003, 004 and 005 (2026-09-30)
+
+`airts/main` `68a2484c38` (merges `0b4680ece` of `patch/unit-tempo` and `68a2484c3` of
+`patch/creg-mtdrawsafe`, patch level 6), Zeus build copied to Tokyo, sync version
+`2026.09.01-31-g68a2484 airts-6`, every launch through `engine-slot.sh`: feature tests 6 of 6 PASS
+(same numbers as the branch); fixture GameOver 2108 on both runs, last census hash 56095; Cogwright
+GameOver 32465 on both runs with every count equal to stock and zero error and sync lines. CI run
+36698348694 green: 28 of 28 unit tests including testCreg, feature tests 6 of 6, determinism 2108.
+

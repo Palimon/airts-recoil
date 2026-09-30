@@ -63,6 +63,7 @@ The spike's Windows cross-compile on Zeus WSL took 16 min 15 s.
 
 | Commit | Where | Sync version |
 |---|---|---|
+| `68a2484c38` (patch level 6: unit-tempo, unit-speedmult, creg-mtdrawsafe; for rc09) | Zeus `~/airts-builds/airts-main-68a2484c38/{linux,windows}` plus `windows-manifest.sha256` (sha256 of the manifest `aaf20daab1137caf1c4d208cbc62e45b7f5c80be7800b0523b333808dd98b36b`); Linux copy on Tokyo `~/recoil-spike/builds/airts-main-68a2484c38/linux` | `2026.09.01-31-g68a2484 airts-6` |
 | `767814c5fe` (patch level 3, release candidate rc06b) | Zeus `~/airts-builds/airts-main-767814c5fe/{linux,windows}` plus `windows-manifest.sha256` (sha256 of the manifest `e7651f2002099d6a0021f30831bdb0bcee3647f222049307f71851bf3bc54a0b`); Linux copy on Tokyo `~/recoil-spike/builds/airts-main-767814c5fe/linux` | `2026.09.01-21-g767814c airts-3` |
 | `1fec2d87d9` | Zeus `~/airts-builds/airts-main-1fec2d87d9/{linux,windows}`; Linux copy on Tokyo `~/recoil-spike/builds/airts-main-1fec2d87d9/linux` | `2026.09.01-16-g1fec2d8 airts-2` |
 | `dc05e27162` | Tokyo `~/recoil-spike/builds/airts-main-dc05e27162/{linux,windows}` (docker, portable Linux) | `2026.09.01-13-gdc05e27 airts-2` |
