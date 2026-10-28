@@ -1,3 +1,38 @@
+# PROCESS — every work unit
+
+Use the project's existing scripts for SETUP and FINISH. If either is
+missing, build and test a reusable script for it. Record the commands
+in the project's root AGENTS.md. Run those scripts for this work unit
+and every future one. Fix the scripts when needed; don't substitute
+manual steps.
+
+1. SETUP — make sure the project's `main` checkout is clean, then pull
+   the latest `main`. Run the project's setup script. It creates an isolated
+   branch and worktree, prepares the project, and returns the worktree
+   path. Work only in the returned worktree.
+
+2. WORK — commit each meaningful unit. No vestige (git has it → delete it):
+   no `.bak`/`.orig`/`~`/`old-`/`new-`/`-v2`/`_final`/`_copy`…; no dead
+   code (commented-out, orphaned, parallel old+new, `if(false)`/disabled);
+   no `deprecated`/`legacy` tags instead of deleting; no stale/strikethrough
+   doc text. Plow ahead.
+
+3. FINISH — from the clean worktree run the project's landing script.
+   It rebases, installs, runs the project's full validation and test
+   suite, race-safely pushes `main`, synchronizes canonical `main` and
+   any submodules to that exact commit, runs the project's deployment
+   if applicable, verifies it, and cleans up. If `main` advances,
+   rebase and validate again before retrying. Fix and rerun on failure.
+
+## Integration branch
+
+In PROCESS, `main` means `airts/main` for this repository. Start work from
+`origin/airts/main` and land back to `airts/main`. This is the integration and
+build branch documented in `PATCHES.md` and `RELEASING.md`.
+
+PROCESS governs the work-unit sequence. Those documents supply the engine
+validation and release commands for the reusable setup and landing scripts.
+
 # AGENTS.md - Coding Agent Guidelines for RecoilEngine
 
 This document provides essential information for AI coding agents working on the RecoilEngine codebase.
@@ -409,7 +444,10 @@ Use preprocessor directives for platform-specific code:
 - `cont/` - Content files
 - `doc/` - Documentation
 
-## AI Usage Policy
+## Upstream AI contribution policy
+
+These contribution rules apply when submitting work to upstream RecoilEngine.
+Maintainer-authorized work in this fork follows PROCESS.
 
 **IMPORTANT:** This project has a strict AI usage policy. See `AI_POLICY.md` for full details.
 
@@ -435,7 +473,7 @@ The engine uses custom thread pools. See `THREADPOOL` define and related code.
 - For other changes: manual testing procedure required
 - Automated tests are encouraged but not always required due to complexity
 
-### Before Submitting PRs
+### Before submitting upstream PRs
 1. Test your changes thoroughly
 2. Reference an accepted issue
 3. Document what testing was performed
