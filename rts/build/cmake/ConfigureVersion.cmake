@@ -38,7 +38,7 @@ if     ("${AIRTS_PATCH_LEVEL}" STREQUAL "")
 	message(FATAL_ERROR "airts/PATCH_LEVEL is missing or does not hold a plain number")
 endif  ()
 if     ("${SPRING_VERSION_ENGINE_COMMITS}" STREQUAL "" OR "${SPRING_VERSION_ENGINE_HASH}" STREQUAL "")
-	message(FATAL_ERROR "AIRTS builds need a git-describe version with commits and hash (got '${SPRING_ENGINE_VERSION}'); check out airts/main with tags, not an upstream release tag")
+	message(FATAL_ERROR "AIRTS builds need a git-describe version with commits and hash (got '${SPRING_ENGINE_VERSION}'); check out main with tags, not an upstream release tag")
 endif  ()
 set(SPRING_VERSION_ENGINE_BRANCH "airts-${AIRTS_PATCH_LEVEL}")
 create_spring_version_string(SPRING_ENGINE_VERSION

@@ -10,8 +10,8 @@ the reason, the proof, the Lua feature flag and the upstream status. The engine 
 | Branch or tag | What it is |
 |---|---|
 | `airts/base`, tag `airts-base-2026-09-29` | Upstream `ff8e2a171613321c8dadca995fd74583d25f4c3e`, never moved. Rebasing onto a new upstream release is a deliberate act that re-runs the whole gate. |
-| `airts/main` | `airts/base` plus the fork plumbing plus every merged patch branch. All builds come from here. |
-| `patch/<name>` | One branch per patch, started from `airts/main`, commit messages prefixed `[<name>]`, merged into `airts/main` with `--no-ff` after the gate below. |
+| `main` | `airts/base` plus the fork plumbing plus every merged patch branch. All builds come from here. |
+| `patch/<name>` | One branch per patch, started from `main`, commit messages prefixed `[<name>]`, merged into `main` with `--no-ff` after the gate below. |
 
 ## For patch authors: exact commands
 
@@ -24,9 +24,9 @@ spike's upstream clone.
 # 1. Remote and base (in whichever clone holds your work)
 git remote add fork git@github-airts-recoil:Palimon/airts-recoil.git 2>/dev/null || true
 git fetch fork
-# 2. Start from airts/main, or move a branch started from ff8e2a1 onto it
-git checkout -b patch/<name> fork/airts/main
-git rebase --onto fork/airts/main ff8e2a171613321c8dadca995fd74583d25f4c3e patch/<name>
+# 2. Start from main, or move a branch started from ff8e2a1 onto it
+git checkout -b patch/<name> fork/main
+git rebase --onto fork/main ff8e2a171613321c8dadca995fd74583d25f4c3e patch/<name>
 # 3. Commits: messages start with "[<name>] "; the last one adds the flag
 #    (LuaPushNamedBool(L, "airts<Name>", true) next to the other airts keys in
 #    rts/Lua/LuaConstEngine.cpp, plus its @field doc line), bumps airts/PATCH_LEVEL by one
@@ -40,7 +40,7 @@ export AIRTS_DET_WRAP=~/recoil-spike/tools/engine-slot.sh
 airts/scripts/determinism.sh <build>/spring-headless /tmp/det-<name>                 # fixture, 1 thread
 AIRTS_DET_THREADS=default airts/scripts/determinism.sh <build>/spring-headless /tmp/cog-<name>   ~/recoil-spike/data ~/recoil-spike/w-cog/host.txt                                    # Cogwright match
 # 6. Merge after the gate (the orchestrator lands it)
-git checkout airts/main && git merge --no-ff patch/<name> && git push fork airts/main
+git checkout main && git merge --no-ff patch/<name> && git push fork main
 ```
 
 Builds: `RELEASING.md` (Zeus WSL: docker-build-v2 for Windows, native for Linux). A native Linux build that
@@ -65,7 +65,7 @@ It replaces the branch name that upstream puts there, so:
 
 Stock at the base commit reports `2026.09.01-5-gff8e2a1 HEAD`. A build needs the upstream version
 tags and history (`git describe --match "[0-9]*"`); CMake stops with an error on a checkout that
-has none. The patch level goes up by one with every patch merged into `airts/main`; the patch
+has none. The patch level goes up by one with every patch merged into `main`; the patch
 branch's own flag commit makes the bump.
 
 ## Lua feature flags
@@ -103,8 +103,8 @@ replaces it with our own fixture.
 
 ## CI
 
-`.github/workflows/airts-ci.yml` runs on pushes to `airts/**` and `patch/**`, pull requests to
-`airts/main`, and by hand:
+`.github/workflows/airts-ci.yml` runs on pushes to `main`, `airts/**` and `patch/**`, pull requests to
+`main`, and by hand:
 
 - `build`: Ubuntu 24.04, gold linker, `-DAI_TYPES=NONE -DPLUTOVG_BUILD_EXAMPLES=OFF
   -DLUNASVG_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF`, `-O3` without debug info, ccache kept

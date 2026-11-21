@@ -26,9 +26,9 @@ manual steps.
 
 ## Integration branch
 
-In PROCESS, `main` means `airts/main` for this repository. Start work from
-`origin/airts/main` and land back to `airts/main`. This is the integration and
-build branch documented in `PATCHES.md` and `RELEASING.md`.
+`main` is this repository's integration and build branch, documented in
+`PATCHES.md` and `RELEASING.md`. Start work from `origin/main` and land back to
+`main`. `master` is upstream's branch and takes no fork work.
 
 PROCESS governs the work-unit sequence. Those documents supply the engine
 validation and release commands for the reusable setup and landing scripts.

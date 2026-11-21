@@ -1,6 +1,6 @@
 # Releasing AIRTS engine builds
 
-Every release comes from a commit on `airts/main` that passed the gate in `PATCHES.md`. The
+Every release comes from a commit on `main` that passed the gate in `PATCHES.md`. The
 Windows and Linux builds of one commit share one sync version (`<git describe> airts-<n>`), so
 they play together; builds of different commits do not.
 
@@ -14,7 +14,7 @@ ccache). One script does both, times them, and checks that both report the same 
 
 ```bash
 cd ~/airts-recoil
-git fetch origin && git checkout --detach origin/airts/main
+git fetch origin && git checkout --detach origin/main
 git submodule update --init --recursive
 airts/scripts/build-release-zeus.sh          # add "cold" to empty both compiler caches first
 ```
@@ -88,7 +88,7 @@ different object sets could therefore, rarely, print different strings for one c
 
 ## Before shipping
 
-1. The gate in `PATCHES.md` passed for this commit, including the CI run on `airts/main`.
+1. The gate in `PATCHES.md` passed for this commit, including the CI run on `main`.
 2. `--sync-version` of the Linux build ends in `airts-<n>` with `<n>` equal to
    `airts/PATCH_LEVEL`, and the Windows build prints the same string.
 3. Tag the commit `airts-<yyyy>.<mm>.<n>` and push the tag to this fork. The tag does not change

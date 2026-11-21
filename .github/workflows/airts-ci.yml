@@ -4,9 +4,9 @@ name: airts-ci
 
 on:
   push:
-    branches: ['airts/**', 'patch/**']
+    branches: ['main', 'airts/**', 'patch/**']
   pull_request:
-    branches: ['airts/main']
+    branches: ['main']
   workflow_dispatch:
 
 concurrency:
